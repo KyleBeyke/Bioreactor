@@ -1,6 +1,21 @@
-# Required libraries for the Raspberry Pi control system
+# Required Python Libraries for Bioreactor Project
 
-requests
-cryptography
+# Libraries for communication with Pico and GPIO
+serial
 RPi.GPIO
-pyserial
+
+# Libraries for time and date handling
+time
+csv
+
+# Cryptography for encryption and decryption of sensitive data
+cryptography
+
+# Requests for handling HTTP requests to the Telegram API
+requests
+
+# Libraries for working with sensors and microcontroller
+adafruit-circuitpython-scd30
+adafruit-circuitpython-bmp280
+adafruit-circuitpython-ds3231
+adafruit-circuitpython-sdcard

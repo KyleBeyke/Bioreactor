@@ -1,3 +1,17 @@
+"""
+This script runs on the Raspberry Pi Pico to handle the bioreactor system's sensor data collection, logging, and communication with the Raspberry Pi 4.
+It interacts with the SCD30 CO2 sensor, BMP280 sensor for pressure and altitude, and the DS3231 RTC for timekeeping.
+The Pico sends data to the Raspberry Pi, logs readings to an SD card, and enters deep sleep upon receiving shutdown commands.
+
+Main Functions:
+- log_data_to_csv: Logs sensor data and events (feed, recalibration) to a CSV file.
+- update_scd30_compensation: Updates the SCD30 sensor with BMP280 altitude and pressure data.
+- get_timestamp_from_rtc: Retrieves the current time from the DS3231 RTC.
+- send_sensor_data: Sends sensor data to the Raspberry Pi.
+- shutdown_pico: Shuts down the Pico and enters deep sleep.
+- handle_commands: Processes commands received from the Raspberry Pi.
+"""
+
 import time
 import board
 import busio
@@ -26,8 +40,8 @@ scd.self_calibration_enabled = False
 bmp280.sea_level_pressure = 1013.25
 
 # Setup SPI for SD card
-spi = busio.SPI(board.GP10, board.GP11, board.GP12)  # SPI pins for SD card module
-cs = digitalio.DigitalInOut(board.GP13)  # Chip select pin for SD card module
+spi = busio.SPI(board.GP10, board.GP11, board.GP12)
+cs = digitalio.DigitalInOut(board.GP13)
 sdcard = sdcardio.SDCard(spi, cs)
 vfs = storage.VfsFat(sdcard)
 storage.mount(vfs, "/sd")
@@ -57,14 +71,11 @@ def update_scd30_compensation():
     altitude = bmp280.altitude  # Altitude in meters
 
     # Update SCD30 compensation values
-    scd.altitude = int(altitude)  # Set altitude compensation (integer)
-    scd.ambient_pressure = int(pressure)  # Set ambient pressure compensation (in mbar)
+    scd.set_altitude_comp(int(altitude))
+    scd.start_continous_measurement(int(pressure))  # Ambient pressure in mbar
 
-    print(f"SCD30 compensation values updated. Waiting for sensor stabilization...")
-    sys.stdout.flush()
-
-    # Wait for sensor stabilization (e.g., 15 seconds)
-    time.sleep(15)
+    print("SCD30 compensation values updated. Waiting for sensor stabilization...")
+    time.sleep(15)  # Wait for sensor stabilization
 
     return pressure, altitude
 
@@ -73,11 +84,7 @@ def get_timestamp_from_rtc():
     now = rtc.datetime
     return f"{now.tm_year}-{now.tm_mon:02}-{now.tm_mday:02} {now.tm_hour:02}:{now.tm_min:02}:{now.tm_sec:02}"
 
-# Function to update DS3231 RTC time
-def update_rtc_time(year, month, day, hour, minute, second):
-    rtc.datetime = time.struct_time((year, month, day, hour, minute, second, 0, -1, -1))
-
-# Function to send sensor data to the Raspberry Pi 4
+# Function to send sensor data to the Raspberry Pi
 def send_sensor_data():
     if scd.data_available:
         co2 = scd.CO2
@@ -87,34 +94,49 @@ def send_sensor_data():
         altitude = bmp280.altitude
         timestamp = get_timestamp_from_rtc()
 
-        # Format the sensor data and send it to the Raspberry Pi
         sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m\n"
-        sys.stdout.write(sensor_data)
-        sys.stdout.flush()
+        print(sensor_data)
 
         # Log the data to the SD card
         log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude)
 
-# Function to shut down the Pico safely and enter deep sleep
+# Function to handle commands from Raspberry Pi
+def handle_commands(command):
+    if command.startswith("SET_TIME"):
+        _, year, month, day, hour, minute, second = command.split(",")
+        rtc.datetime = time.struct_time((int(year), int(month), int(day), int(hour), int(minute), int(second), 0, -1, -1))
+        print(f"RTC time updated to: {year}-{month}-{day} {hour}:{minute}:{second}")
+
+    elif command.startswith("CALIBRATE"):
+        recalibration_value = int(command.split(",")[1])
+        scd.set_forced_recalibration(recalibration_value)
+        timestamp = get_timestamp_from_rtc()
+        log_data_to_csv(timestamp, scd.CO2, scd.temperature, scd.relative_humidity, recalibration=recalibration_value)
+        print(f"Recalibration set to: {recalibration_value} ppm")
+
+    elif command.startswith("FEED"):
+        feed_amount = command.split(",")[1]
+        timestamp = get_timestamp_from_rtc()
+        log_data_to_csv(timestamp, scd.CO2, scd.temperature, scd.relative_humidity, feed_amount=feed_amount)
+        print(f"Feed logged: {feed_amount} grams")
+
+    elif command.startswith("SHUTDOWN"):
+        shutdown_pico()
+
+# Function to shut down the Pico and enter deep sleep
 def shutdown_pico():
     print("Shutting down the Pico... Closing all operations.")
-    sys.stdout.flush()  # Flush any remaining output
-    time.sleep(2)  # Allow time for any final operations
-
-    # Enter deep sleep mode
+    time.sleep(2)
     print("Entering deep sleep...")
-    sys.stdout.flush()
 
     # Setup deep sleep with an alarm pin that wakes it on signal
-    wake_alarm = alarm.pin.PinAlarm(pin=board.GP15, value=False, pull=True)  # Set a wake-up pin (adjust pin as needed)
+    wake_alarm = alarm.pin.PinAlarm(pin=board.GP15, value=False, pull=True)
     alarm.exit_and_deep_sleep_until_alarms(wake_alarm)
 
 # Wake up and inform Raspberry Pi that the Pico has restarted
 def wake_up_message():
     print("Pico has restarted after deep sleep.")
-    sys.stdout.flush()
 
-# If Pico just woke up from deep sleep, send restart message
 if alarm.wake_alarm:
     wake_up_message()
 
@@ -124,47 +146,20 @@ while True:
     current_time = time.monotonic()
 
     # Check if 15 minutes (900 seconds) have passed since the last reading
-    if current_time - last_reading_time >= 900:  # 900 seconds = 15 minutes
+    if current_time - last_reading_time >= 900:
         try:
-            # Update pressure and altitude compensation, then wait for stabilization
             update_scd30_compensation()
-
-            # After the sensor has stabilized, send sensor data to the Pi and log it
             send_sensor_data()
-
-            last_reading_time = current_time  # Update last reading time
+            last_reading_time = current_time
 
         except Exception as e:
             print(f"Error: {e}")
 
-    # Continuously check for commands from Raspberry Pi 4 (via serial)
+    # Continuously check for commands from Raspberry Pi
     try:
         if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
             command = input().strip()
-
-            if command.startswith("SET_TIME"):  # Handle time sync command
-                _, year, month, day, hour, minute, second = command.split(",")
-                update_rtc_time(int(year), int(month), int(day), int(hour), int(minute), int(second))
-                print(f"RTC time updated to: {year}-{month}-{day} {hour}:{minute}:{second}")
-                sys.stdout.flush()
-
-            elif command.startswith("CALIBRATE"):  # Handle recalibration command
-                recalibration_value = int(command.split(",")[1])
-                scd.set_forced_recalibration(recalibration_value)
-                timestamp = get_timestamp_from_rtc()
-                log_data_to_csv(timestamp, scd.CO2, scd.temperature, scd.relative_humidity, recalibration=recalibration_value)
-                print(f"Recalibration set to: {recalibration_value} ppm")
-                sys.stdout.flush()
-
-            elif command.startswith("FEED"):  # Handle feed command
-                feed_amount = command.split(",")[1]
-                timestamp = get_timestamp_from_rtc()
-                log_data_to_csv(timestamp, scd.CO2, scd.temperature, scd.relative_humidity, feed_amount=feed_amount)
-                print(f"Feed logged: {feed_amount} grams")
-                sys.stdout.flush()
-
-            elif command.startswith("SHUTDOWN"):  # Handle shutdown command
-                shutdown_pico()
+            handle_commands(command)
 
     except Exception as e:
         print(f"Error processing command: {e}")
