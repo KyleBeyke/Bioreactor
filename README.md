@@ -1,24 +1,14 @@
-# Bioreactor - Raspberry Pi Pico and Raspberry Pi 4 Sensor System with Remote Control and Deep Sleep
+# Bioreactor System - Raspberry Pi Pico and Raspberry Pi 4 Sensor System with Telegram Notifications
 
-This project enables a **Raspberry Pi Pico** connected to an **SCD30 (CO2 sensor)**, **BMP280 (pressure and altitude sensor)**, and **DS3231 RTC (real-time clock)** to log sensor data to an SD card while communicating with a **Raspberry Pi 4**. The Raspberry Pi 4 can control the Pico, sending commands like calibrating the sensors, logging feed operations, and shutting down the Pico. After shutdown, the Pico enters **deep sleep** and can be restarted remotely by the Raspberry Pi through a GPIO pin.
-
-Additionally, the system can send **Telegram notifications** when the CO2 levels fall below a threshold after initially exceeding it. The bot token and chat ID are securely encrypted and tested automatically to ensure that the connection works.
-
----
+This project provides a system using a **Raspberry Pi Pico** connected to sensors for monitoring CO2 levels, temperature, humidity, and atmospheric pressure. It integrates with a **Raspberry Pi 4** to control the Pico, log data to an SD card, and send notifications via **Telegram** when necessary thresholds are crossed.
 
 ## Features
 
 - Logs **CO2**, **temperature**, **humidity**, **pressure**, and **altitude** data every 15 minutes.
-- Allows the Raspberry Pi to send **remote commands** to the Pico:
-  - **Time synchronization** (automatically every 10 minutes).
-  - **CO2 calibration**.
-  - **Logging feed operations**.
-  - **Shutdown** the Pico (enters deep sleep).
-  - **Restart** the Pico from deep sleep via GPIO.
-  - **Telegram notifications** for CO2 level alerts.
-- Logs data to a CSV file on the Pico’s SD card.
-- Logs commands on the Raspberry Pi for tracking control events.
-- Pico enters **deep sleep** after shutdown and waits for a restart command from the Pi.
+- Sends **Telegram notifications** when CO2 levels cross a defined threshold.
+- Allows **remote control** of the Pico from the Raspberry Pi for calibration, feed logging, shutdown, and restart operations.
+- Pico enters **deep sleep** after a shutdown command and can be woken up via a GPIO pin connected to the Raspberry Pi.
+- Logs all sensor data to a CSV file on the Pico's SD card and commands on the Raspberry Pi.
 
 ---
 
@@ -35,9 +25,27 @@ Additionally, the system can send **Telegram notifications** when the CO2 levels
 7. **Jumper wires** (for connections).
 8. **GPIO connection** between Raspberry Pi and Pico for deep sleep wake-up (e.g., GPIO17 on Pi and GP15 on Pico).
 
-### Libraries
+---
+
+## Software Requirements
+
+### Python Libraries for Raspberry Pi
+
+Make sure the following libraries are installed on the Raspberry Pi:
+
+- `requests`
+- `cryptography`
+- `RPi.GPIO`
+- `pyserial`
+
+You can install these using `pip` by running the following command:
+
+sudo pip install requests cryptography RPi.GPIO pyserial
+
+### CircuitPython Libraries for the Pico
 
 Install the following CircuitPython libraries on the Pico:
+
 - `adafruit_scd30.mpy`
 - `adafruit_bmp280.mpy`
 - `adafruit_ds3231.mpy`
@@ -54,96 +62,65 @@ You can download these from the [Adafruit CircuitPython Library Bundle](https://
 
 ### Wiring
 
-Here are the detailed wiring instructions for each component:
-
-1. **SCD30 CO2 Sensor** (I2C):
-   - **SDA (Data)**: Connect to `GP20` on the Pico.
-   - **SCL (Clock)**: Connect to `GP21` on the Pico.
-   - **Power (Vin)**: Connect to a 3.3V or 5V pin on the Pico (depending on your sensor’s requirements).
-   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
-
-2. **BMP280 Pressure and Altitude Sensor** (I2C):
-   - **SDA (Data)**: Connect to `GP20` on the Pico (shared with the SCD30 sensor).
-   - **SCL (Clock)**: Connect to `GP21` on the Pico (shared with the SCD30 sensor).
-   - **Power (Vin)**: Connect to a 3.3V pin on the Pico.
-   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
-
-3. **DS3231 RTC Module** (I2C):
-   - **SDA (Data)**: Connect to `GP20` on the Pico (shared with the SCD30 and BMP280 sensors).
-   - **SCL (Clock)**: Connect to `GP21` on the Pico (shared with the SCD30 and BMP280 sensors).
-   - **Power (VCC)**: Connect to a 3.3V pin on the Pico.
-   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
-
-4. **MicroSD Card Adapter** (SPI):
-   - **MOSI (Data)**: Connect to `GP10` on the Pico.
-   - **MISO (Data)**: Connect to `GP11` on the Pico.
-   - **SCLK (Clock)**: Connect to `GP12` on the Pico.
-   - **CS (Chip Select)**: Connect to `GP13` on the Pico.
-   - **Power (VCC)**: Connect to a 3.3V pin on the Pico.
-   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
-
-5. **GPIO Wake-Up Connection** (Pico to Raspberry Pi):
-   - **Pico Pin GP15**: Connect to **GPIO17** on the Raspberry Pi (this is used for waking up the Pico from deep sleep).
+- **SCD30**: Connect via I2C (e.g., `GP20` for SDA, `GP21` for SCL).
+- **BMP280**: Connect via I2C (same as SCD30).
+- **DS3231 RTC**: Connect via I2C (same as SCD30).
+- **SD Card**: Connect via SPI (`GP10` for MOSI, `GP11` for MISO, `GP12` for SCLK, `GP13` for CS).
+- **GPIO for Wake-Up**: 
+  - Connect **GPIO17** on Raspberry Pi to **GP15** on Pico.
 
 ---
 
-## Installing the Software
+## Setting Up the Environment
 
 ### 1. Install CircuitPython on Raspberry Pi Pico
 
-Follow the Adafruit guide to install CircuitPython on the Pico. After installation, copy the necessary libraries into the `lib` folder on the Pico’s **CIRCUITPY** drive.
+Follow the [Adafruit guide](https://learn.adafruit.com/welcome-to-circuitpython) to install CircuitPython on the Pico. After installation, copy the necessary libraries into the `lib` folder on the Pico’s **CIRCUITPY** drive.
 
 ### 2. Set up the Raspberry Pi 4
 
 Ensure Python 3 is installed on your Raspberry Pi. Use the following command to install Python 3:
 
-`sudo apt-get install python3`
+sudo apt-get install python3
 
-### 3. Upload the Code to the Raspberry Pi Pico
+### 3. Setting Up Telegram Bot and Environment Variables
 
-- Copy the provided Pico code (`pico_sensor_system.py`) to the **CIRCUITPY** drive.
-- Ensure that all required libraries are placed in the `lib` folder on the Pico.
+To enable notifications via Telegram, follow these steps:
 
-### 4. Upload the Code to the Raspberry Pi 4
+1. Create a Telegram bot using the [BotFather](https://core.telegram.org/bots#botfather) and note the **bot token**.
+2. Start a chat with your bot and get your **chat ID**. You can get your chat ID by sending `/start` to your bot and querying the Telegram API with this URL:
+   
+https://api.telegram.org/bot<your-bot-token>/getUpdates
 
-- Save the Raspberry Pi 4 code (`pi_control_system.py`) to your Raspberry Pi.
+3. Run the provided **`setup_bioreactor_env.py`** script to securely encrypt your bot token and chat ID into environment variables:
 
-### 5. Set up Telegram Bot Credentials and Secure Key
+python3 setup_bioreactor_env.py
 
-1. **Create a Telegram bot**:
-   - Open the Telegram app and search for `BotFather`.
-   - Start a chat with **BotFather** and use the command `/newbot` to create a new bot.
-   - Follow the prompts to name your bot and create a unique username for it.
-   - After the bot is created, BotFather will give you a **bot token**. You’ll need this token for your notifications.
-
-2. **Get your chat ID**:
-   - Start a conversation with your newly created bot by sending a `/start` message.
-   - To find your chat ID, you can use this URL in your browser, replacing `YOUR_BOT_TOKEN` with your actual bot token:
-     `https://api.telegram.org/botYOUR_BOT_TOKEN/getUpdates`
-   - This will return a JSON object where you can find your **chat ID**.
-
-3. **Run the encrypt_token.py script**:
-   This script will prompt you for your **Telegram bot token** and **chat ID**, and it will generate an encryption key. It will store the encrypted token and chat ID in a secure file located at `~/.config/bioreactor_secure_config`.
-
-4. To run the script, use:
-
-`python3 encrypt_token.py`
-
-5. After encryption, the script will automatically test the Telegram connection by running `test_telegram_connection.py`. You should receive a test message on Telegram confirming the connection.
-
-6. The sensitive data will be stored securely in the `~/.config/bioreactor_secure_config` file, and this file will be protected by strict file permissions (only readable by the user).
+This script will prompt you to enter your bot token and chat ID. The encrypted values will be stored in `~/.config/bioreactor_secure_config`.
 
 ---
 
 ## Running the System
 
-### 1. Start the Raspberry Pi Control System
+### 1. Upload the Code to the Raspberry Pi Pico
 
- - Run the following command on your Raspberry Pi to start the control system:
+- Copy the provided Pico code (`pico_sensor_system.py`) to the **CIRCUITPY** drive.
+- Ensure that all required libraries are placed in the `lib` folder on the Pico.
 
-`python3 pi_control_system.py`
+### 2. Upload the Code to the Raspberry Pi 4
 
-### 2. Using the Raspberry Pi Console
+- Save the Raspberry Pi 4 code (`pi_control_system.py`) to your Raspberry Pi.
+- Make the script executable by entering the following command:
+
+chmod +x pi_control_system.py
+
+- Run the script with:
+
+python3 pi_control_system.py
+
+---
+
+## Raspberry Pi Console Commands
 
 Once the control system is running, the following commands are available via the Raspberry Pi terminal:
 
@@ -157,11 +134,10 @@ Once the control system is running, the following commands are available via the
 
 - **`r` (restart)**: Wakes the Pico from deep sleep by toggling the GPIO pin.
 
+- **`t` (set CO2 threshold)**: Sets a new CO2 warning threshold.
+  - Example: Enter `t` and then provide the new CO2 threshold in ppm.
+
 - **`e` (exit)**: Exits the Raspberry Pi control system.
-
-### 3. Time Synchronization
-
-The Raspberry Pi automatically syncs its time with the Pico upon startup and every 10 minutes to ensure accurate timestamps in the logged data.
 
 ---
 
@@ -185,17 +161,11 @@ The Pico logs sensor data and command-related events in a CSV file on the SD car
 
 ---
 
-## GPIO Wake-Up Pin
+## Deep Sleep and GPIO Wake-Up
 
-The Pico enters **deep sleep** after receiving the `SHUTDOWN` command after receiving the `SHUTDOWN` command. To wake the Pico:
+The Pico enters **deep sleep** after receiving the `SHUTDOWN` command. To wake the Pico:
 - The Raspberry Pi sends the **restart command** (`r`).
 - The Raspberry Pi toggles **GPIO17**, connected to **GP15** on the Pico, to wake it up from deep sleep.
-
----
-
-## Telegram Notifications
-
-The system will send an alert via Telegram when the CO2 level falls below 120% of the calibration value after initially exceeding it. This is managed by the **`pi_control_system.py`** script, which decrypts the bot token and chat ID from the secure configuration file.
 
 ---
 
@@ -213,13 +183,9 @@ The system will send an alert via Telegram when the CO2 level falls below 120% o
 3. **Data not logging**:
    - Verify that the SD card is correctly connected and mounted on the Pico.
 
----
-
-## Security Considerations
-
-To keep your **Telegram bot token** and **chat ID** secure, the project uses encrypted environmental variables and stores them securely. The sensitive data is encrypted and stored in the `~/.config/bioreactor_secure_config` file. Make sure that this file is protected by strict file permissions and that the encryption key is stored securely. Do not commit sensitive files or the key to version control (e.g., GitHub).
-
-The `encrypt_token.py` script automatically sets file permissions so that only the owner can read and write to these sensitive files. Additionally, `.gitignore` is updated to ensure that the secure configuration files are not committed to your repository.
+4. **Telegram notifications not working**:
+   - Ensure your bot token and chat ID are correct and stored securely.
+   - Run `test_telegram_connection.py` to verify the connection.
 
 ---
 
@@ -227,6 +193,4 @@ The `encrypt_token.py` script automatically sets file permissions so that only t
 
 - The Pico will log data to the SD card every 15 minutes, even when no commands are being sent.
 - Ensure that you have the correct libraries installed on the Pico for the sensors and RTC to function properly.
-- Use **Telegram notifications** to monitor CO2 levels remotely.
-
-By following these instructions, you will have a fully functional bioreactor sensor system that is capable of remote control and real-time notifications using Telegram.
+- Regularly check the SD card for logs and ensure sufficient storage is available.

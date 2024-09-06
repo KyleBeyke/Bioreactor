@@ -1,4 +1,6 @@
-cryptography
+# Required libraries for the Raspberry Pi control system
+
 requests
-serial
+cryptography
 RPi.GPIO
+pyserial

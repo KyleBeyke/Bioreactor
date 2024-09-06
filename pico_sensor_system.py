@@ -1,16 +1,3 @@
-"""
-This script is responsible for controlling a bioreactor system using a Raspberry Pi Pico microcontroller. It reads data from various sensors including an SCD30 CO2 sensor, a BMP280 temperature and pressure sensor, and a DS3231 RTC (Real-Time Clock). The script logs the sensor data to a CSV file on an SD card and communicates with a Raspberry Pi 4 for commands and synchronization.
-
-Functions:
-- log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitude=None, feed_amount=None, recalibration=None): Logs the sensor data to a CSV file.
-- update_scd30_compensation(): Updates the SCD30 altitude and pressure compensation using BMP280 values.
-- get_timestamp_from_rtc(): Retrieves the current time from the DS3231 RTC.
-- update_rtc_time(year, month, day, hour, minute, second): Updates the DS3231 RTC time.
-- send_sensor_data(): Sends the sensor data to the Raspberry Pi 4.
-- shutdown_pico(): Shuts down the Pico safely and enters deep sleep.
-- wake_up_message(): Sends a wake-up message to the Raspberry Pi 4 after waking up from deep sleep.
-"""
-
 import time
 import board
 import busio
@@ -70,8 +57,8 @@ def update_scd30_compensation():
     altitude = bmp280.altitude  # Altitude in meters
 
     # Update SCD30 compensation values
-    scd.set_altitude_comp(int(altitude))  # Set altitude compensation (integer)
-    scd.start_continous_measurement(int(pressure))  # Set ambient pressure compensation (in mbar)
+    scd.altitude = int(altitude)  # Set altitude compensation (integer)
+    scd.ambient_pressure = int(pressure)  # Set ambient pressure compensation (in mbar)
 
     print(f"SCD30 compensation values updated. Waiting for sensor stabilization...")
     sys.stdout.flush()
