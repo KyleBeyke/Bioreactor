@@ -1,6 +1,3 @@
-Here is the full README.md generated as a single markdown block, as requested:
-
-```md
 # Raspberry Pi Pico and Raspberry Pi 4 Bioreactor Control System
 
 This project is designed to control a bioreactor using a **Raspberry Pi 4** connected to a **Raspberry Pi Pico**. It monitors CO2 levels, temperature, humidity, pressure, and altitude using connected sensors and logs the data to an SD card. The system also allows remote control of the Pico from the Raspberry Pi and can send alerts via Telegram when CO2 levels drop below a set threshold.
