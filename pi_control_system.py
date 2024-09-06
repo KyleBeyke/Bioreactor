@@ -1,25 +1,21 @@
 """
-This script controls a bioreactor's Raspberry Pi using a Pico microcontroller. It communicates with the Pico via serial connection and performs various operations such as time synchronization, feeding, recalibration, shutdown, and restart.
-
-Functions:
-- log_command(command): Logs the issued commands to a CSV file.
-- sync_time_with_pico(): Sends a time synchronization command to the Pico.
-- wake_pico(): Wakes up the Pico from deep sleep.
-- periodic_time_sync(interval_seconds): Periodically syncs the time with the Pico.
-- main(): The main loop of the script.
-
-Usage:
-1. Connect the Pico to the Raspberry Pi via USB.
-2. Run the script on the Raspberry Pi.
-3. Follow the prompts to interact with the Pico and perform various operations.
-
-Note: Make sure to adjust the GPIO pin and serial port settings according to your setup.
+This script controls a bioreactor's Raspberry Pi using a Pico microcontroller. It communicates with the Pico via serial connection and performs various tasks such as time synchronization, sending commands to the Pico, handling sensor data, and sending notifications via Telegram.
+The main functions of this script are:
+- send_telegram_message: Sends a message via Telegram using a bot token and chat ID.
+- log_command: Logs commands issued to the Pico in a CSV file.
+- sync_time_with_pico: Sends a time synchronization command to the Pico.
+- wake_pico: Wakes up the Pico from deep sleep.
+- periodic_time_sync: Periodically syncs the time with the Pico.
+- main: The main loop of the script that handles sensor data, time synchronization, and user input for commands.
+The script also defines some constants and variables for calibration, CO2 threshold, and tracking the state of CO2 levels.
+Note: This script requires the following dependencies: serial, time, csv, RPi.GPIO, cryptography.fernet, and requests.
 """
-
 import serial
 import time
 import csv
 import RPi.GPIO as GPIO  # Import for controlling GPIO pins (used to wake the Pico)
+from cryptography.fernet import Fernet
+import requests
 
 # GPIO setup for waking up the Pico
 WAKE_PIN = 17  # Choose an available GPIO pin on the Raspberry Pi (GPIO17 in this case)
@@ -31,6 +27,33 @@ ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)  # Adjust port as needed
 
 # CSV file for logging commands on the Pi
 filename = "commands_log.csv"
+
+# Load the encryption key and encrypted data (for Telegram bot)
+with open("secret_key.key", "rb") as key_file:
+    key = key_file.read()
+
+cipher_suite = Fernet(key)
+
+with open("encrypted_data.txt", "rb") as file:
+    encrypted_bot_token = file.readline().strip()
+    encrypted_chat_id = file.readline().strip()
+
+# Decrypt bot token and chat ID
+bot_token = cipher_suite.decrypt(encrypted_bot_token).decode()
+chat_id = cipher_suite.decrypt(encrypted_chat_id).decode()
+
+# Function to send a message via Telegram
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    data = {
+        'chat_id': chat_id,
+        'text': message
+    }
+    response = requests.post(url, data=data)
+    if response.status_code == 200:
+        print("Message sent successfully!")
+    else:
+        print(f"Failed to send message. Status code: {response.status_code}")
 
 # Function to log commands issued to the Pico
 def log_command(command):
@@ -65,6 +88,14 @@ def periodic_time_sync(interval_seconds=600):
             last_sync = current_time
         yield
 
+# Calibration and CO2 threshold
+calibration_value = 400  # Replace this with your calibration value logic
+co2_threshold = calibration_value * 1.2  # 120% of the calibration value
+
+# Flags to track the state of CO2 levels
+threshold_crossed = False  # Has CO2 exceeded the threshold?
+alert_sent = False  # Ensure one alert is sent until the CO2 crosses the threshold again
+
 # Main loop
 time_sync_generator = periodic_time_sync()
 
@@ -72,13 +103,33 @@ try:
     sync_time_with_pico()  # Initial time sync with the Pico at startup
 
     while True:
-        # Check for Pico wake-up after deep sleep
+        # Check for Pico wake-up after deep sleep or sensor data
         if ser.in_waiting > 0:
             sensor_data = ser.readline().decode('utf-8').strip()
-            if "Pico has restarted" in sensor_data:
+            
+            # Handle sensor data
+            if "CO2" in sensor_data:
+                # Parse the CO2 value from the sensor data
+                co2 = float(sensor_data.split(":")[1].strip())
+                print(f"CO2: {co2} ppm")
+
+                # Check if CO2 has exceeded the 120% threshold
+                if co2 > co2_threshold:
+                    threshold_crossed = True
+                    alert_sent = False  # Reset alert flag
+                    print(f"CO2 level exceeded {co2_threshold} ppm")
+
+                # If CO2 falls below the threshold after exceeding it
+                if threshold_crossed and not alert_sent and co2 < co2_threshold:
+                    message = f"ALERT: CO2 level has fallen below {co2_threshold} ppm! Current value: {co2} ppm."
+                    send_telegram_message(message)
+                    alert_sent = True
+                    print(f"Notification sent: CO2 level below {co2_threshold} ppm")
+
+            elif "Pico has restarted" in sensor_data:
                 print(sensor_data)
             else:
-                print(sensor_data)  # Display sensor data in the terminal
+                print(sensor_data)  # Display any other sensor data
 
         # Perform periodic time synchronization
         next(time_sync_generator)
