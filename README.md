@@ -50,12 +50,36 @@ You can download these from the [Adafruit CircuitPython Library Bundle](https://
 
 ### Wiring
 
-- **SCD30**: Connect via I2C (e.g., `GP20` for SDA, `GP21` for SCL).
-- **BMP280**: Connect via I2C (same as SCD30).
-- **DS3231 RTC**: Connect via I2C (same as SCD30).
-- **SD Card**: Connect via SPI (`GP10` for MOSI, `GP11` for MISO, `GP12` for SCLK, `GP13` for CS).
-- **GPIO for Wake-Up**: 
-  - Connect **GPIO17** on Raspberry Pi to **GP15** on Pico.
+Here are the detailed wiring instructions for each component:
+
+1. **SCD30 CO2 Sensor** (I2C):
+   - **SDA (Data)**: Connect to `GP20` on the Pico.
+   - **SCL (Clock)**: Connect to `GP21` on the Pico.
+   - **Power (Vin)**: Connect to a 3.3V or 5V pin on the Pico (depending on your sensor’s requirements).
+   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
+
+2. **BMP280 Pressure and Altitude Sensor** (I2C):
+   - **SDA (Data)**: Connect to `GP20` on the Pico (shared with the SCD30 sensor).
+   - **SCL (Clock)**: Connect to `GP21` on the Pico (shared with the SCD30 sensor).
+   - **Power (Vin)**: Connect to a 3.3V pin on the Pico.
+   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
+
+3. **DS3231 RTC Module** (I2C):
+   - **SDA (Data)**: Connect to `GP20` on the Pico (shared with the SCD30 and BMP280 sensors).
+   - **SCL (Clock)**: Connect to `GP21` on the Pico (shared with the SCD30 and BMP280 sensors).
+   - **Power (VCC)**: Connect to a 3.3V pin on the Pico.
+   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
+
+4. **MicroSD Card Adapter** (SPI):
+   - **MOSI (Data)**: Connect to `GP10` on the Pico.
+   - **MISO (Data)**: Connect to `GP11` on the Pico.
+   - **SCLK (Clock)**: Connect to `GP12` on the Pico.
+   - **CS (Chip Select)**: Connect to `GP13` on the Pico.
+   - **Power (VCC)**: Connect to a 3.3V pin on the Pico.
+   - **Ground (GND)**: Connect to any ground (GND) pin on the Pico.
+
+5. **GPIO Wake-Up Connection** (Pico to Raspberry Pi):
+   - **Pico Pin GP15**: Connect to **GPIO17** on the Raspberry Pi (this is used for waking up the Pico from deep sleep).
 
 ---
 
@@ -69,7 +93,7 @@ Follow the Adafruit guide to install CircuitPython on the Pico. After installati
 
 Ensure Python 3 is installed on your Raspberry Pi. Use the following command to install Python 3:
 
-`sudo apt-get install python3`
+sudo apt-get install python3
 
 ### 3. Upload the Code to the Raspberry Pi Pico
 
