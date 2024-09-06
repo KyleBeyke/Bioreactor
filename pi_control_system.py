@@ -10,12 +10,15 @@ The main functions of this script are:
 The script also defines some constants and variables for calibration, CO2 threshold, and tracking the state of CO2 levels.
 Note: This script requires the following dependencies: serial, time, csv, RPi.GPIO, cryptography.fernet, and requests.
 """
+
 import serial
 import time
 import csv
+import os  # To access environment variables and file paths
 import RPi.GPIO as GPIO  # Import for controlling GPIO pins (used to wake the Pico)
 from cryptography.fernet import Fernet
 import requests
+import base64  # Needed for encoding/decoding keys
 
 # GPIO setup for waking up the Pico
 WAKE_PIN = 17  # Choose an available GPIO pin on the Raspberry Pi (GPIO17 in this case)
@@ -28,19 +31,26 @@ ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)  # Adjust port as needed
 # CSV file for logging commands on the Pi
 filename = "commands_log.csv"
 
-# Load the encryption key and encrypted data (for Telegram bot)
-with open("secret_key.key", "rb") as key_file:
-    key = key_file.read()
+# Decrypt the stored bot token and chat ID from the secure file
+def decrypt_data():
+    secure_file_path = os.path.expanduser("~/.config/bioreactor_secure_config")
+    
+    # Load the encrypted data from the file
+    with open(secure_file_path) as f:
+        lines = f.readlines()
+        encryption_key = base64.urlsafe_b64decode(lines[0].split('=')[1].strip())
+        encrypted_bot_token = lines[1].split('=')[1].strip()
+        encrypted_chat_id = lines[2].split('=')[1].strip()
 
-cipher_suite = Fernet(key)
+    # Decrypt the bot token and chat ID
+    cipher_suite = Fernet(encryption_key)
+    bot_token = cipher_suite.decrypt(encrypted_bot_token.encode()).decode()
+    chat_id = cipher_suite.decrypt(encrypted_chat_id.encode()).decode()
 
-with open("encrypted_data.txt", "rb") as file:
-    encrypted_bot_token = file.readline().strip()
-    encrypted_chat_id = file.readline().strip()
+    return bot_token, chat_id
 
-# Decrypt bot token and chat ID
-bot_token = cipher_suite.decrypt(encrypted_bot_token).decode()
-chat_id = cipher_suite.decrypt(encrypted_chat_id).decode()
+# Use the decrypted values in the application
+bot_token, chat_id = decrypt_data()
 
 # Function to send a message via Telegram
 def send_telegram_message(message):
