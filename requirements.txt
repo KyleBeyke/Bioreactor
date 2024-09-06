@@ -1,20 +1,16 @@
-# Required Python Libraries for Bioreactor Project
+# External libraries required for the bioreactor project
 
-# Libraries for communication with Pico and GPIO
-serial
+# Communication and GPIO control
 RPi.GPIO
-
-# Libraries for time and date handling
-time
-csv
+pyserial
 
 # Cryptography for encryption and decryption of sensitive data
 cryptography
 
-# Requests for handling HTTP requests to the Telegram API
+# HTTP requests for Telegram API
 requests
 
-# Libraries for working with sensors and microcontroller
+# CircuitPython libraries for sensors and microcontroller support
 adafruit-circuitpython-scd30
 adafruit-circuitpython-bmp280
 adafruit-circuitpython-ds3231

@@ -1,15 +1,15 @@
 """
-This script runs on the Raspberry Pi Pico to handle the bioreactor system's sensor data collection, logging, and communication with the Raspberry Pi 4.
-It interacts with the SCD30 CO2 sensor, BMP280 sensor for pressure and altitude, and the DS3231 RTC for timekeeping.
-The Pico sends data to the Raspberry Pi, logs readings to an SD card, and enters deep sleep upon receiving shutdown commands.
+pico_sensor_system.py
 
-Main Functions:
-- log_data_to_csv: Logs sensor data and events (feed, recalibration) to a CSV file.
-- update_scd30_compensation: Updates the SCD30 sensor with BMP280 altitude and pressure data.
-- get_timestamp_from_rtc: Retrieves the current time from the DS3231 RTC.
-- send_sensor_data: Sends sensor data to the Raspberry Pi.
-- shutdown_pico: Shuts down the Pico and enters deep sleep.
-- handle_commands: Processes commands received from the Raspberry Pi.
+This script runs on the Raspberry Pi Pico to manage sensor readings and communication with the Raspberry Pi.
+It supports:
+- Reading data from the SCD30 CO2 sensor, BMP280 pressure sensor, and DS3231 RTC.
+- Logging sensor data to an SD card.
+- Responding to commands (feed operations, recalibration, shutdown).
+- Synchronizing time with the Raspberry Pi.
+- Entering deep sleep and waking via GPIO.
+
+The script includes error handling, logging, and improved modularity.
 """
 
 import time
@@ -26,18 +26,20 @@ import sys
 import select
 import microcontroller  # Used for safe shutdown and reset
 import alarm  # Used for deep sleep and wake-up
+import logging
 
-# Initialize I2C for SCD30, BMP280, and DS3231 RTC
+# Initialize logging
+LOG_FILE = "/sd/pico_log.log"
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+
+# I2C initialization for SCD30, BMP280, and DS3231 RTC
 i2c = busio.I2C(board.GP21, board.GP20, frequency=50000)
-scd = adafruit_scd30.SCD30(i2c)
+scd30 = adafruit_scd30.SCD30(i2c)
 bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 rtc = adafruit_ds3231.DS3231(i2c)
 
 # Disable auto-calibration for SCD30
-scd.self_calibration_enabled = False
-
-# Set BMP280 reference sea level pressure (in hPa)
-bmp280.sea_level_pressure = 1013.25
+scd30.self_calibration_enabled = False
 
 # Setup SPI for SD card
 spi = busio.SPI(board.GP10, board.GP11, board.GP12)
@@ -46,102 +48,84 @@ sdcard = sdcardio.SDCard(spi, cs)
 vfs = storage.VfsFat(sdcard)
 storage.mount(vfs, "/sd")
 
-# CSV file for logging data
-filename = "/sd/co2_data.csv"
+# CSV file for logging sensor data
+DATA_LOG_FILE = "/sd/sensor_data.csv"
 
 # Function to log data to the CSV file
 def log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitude=None, feed_amount=None, recalibration=None):
-    with open(filename, mode='a', newline='') as csvfile:
-        fieldnames = ['timestamp', 'CO2', 'temperature', 'humidity', 'pressure', 'altitude', 'feed_amount', 'recalibration']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writerow({
-            'timestamp': timestamp,
-            'CO2': co2,
-            'temperature': temperature,
-            'humidity': humidity,
-            'pressure': pressure,
-            'altitude': altitude,
-            'feed_amount': feed_amount,
-            'recalibration': recalibration
-        })
+    """ Logs sensor data to CSV file on SD card """
+    try:
+        with open(DATA_LOG_FILE, mode='a', newline='') as csvfile:
+            fieldnames = ['timestamp', 'CO2', 'temperature', 'humidity', 'pressure', 'altitude', 'feed_amount', 'recalibration']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writerow({
+                'timestamp': timestamp,
+                'CO2': co2,
+                'temperature': temperature,
+                'humidity': humidity,
+                'pressure': pressure,
+                'altitude': altitude,
+                'feed_amount': feed_amount,
+                'recalibration': recalibration
+            })
+        logging.info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%")
+    except Exception as e:
+        logging.error(f"Failed to log data to CSV: {e}")
 
-# Function to update SCD30 altitude and pressure compensation using BMP280 values
+# Function to update SCD30 altitude and pressure compensation using BMP280
 def update_scd30_compensation():
-    pressure = bmp280.pressure  # Pressure in hPa
-    altitude = bmp280.altitude  # Altitude in meters
+    """ Updates altitude and pressure compensation for the SCD30 based on BMP280 data """
+    try:
+        pressure = bmp280.pressure
+        altitude = bmp280.altitude
+        scd30.set_altitude_comp(int(altitude))
+        scd30.start_continous_measurement(int(pressure))
+        logging.info(f"Compensation updated: Pressure: {pressure}, Altitude: {altitude}")
+    except Exception as e:
+        logging.error(f"Failed to update compensation: {e}")
 
-    # Update SCD30 compensation values
-    scd.set_altitude_comp(int(altitude))
-    scd.start_continous_measurement(int(pressure))  # Ambient pressure in mbar
-
-    print("SCD30 compensation values updated. Waiting for sensor stabilization...")
-    time.sleep(15)  # Wait for sensor stabilization
-
-    return pressure, altitude
-
-# Function to get the current time from DS3231 RTC
+# Function to get the current timestamp from the RTC
 def get_timestamp_from_rtc():
+    """ Retrieves the current timestamp from DS3231 RTC """
     now = rtc.datetime
     return f"{now.tm_year}-{now.tm_mon:02}-{now.tm_mday:02} {now.tm_hour:02}:{now.tm_min:02}:{now.tm_sec:02}"
 
 # Function to send sensor data to the Raspberry Pi
 def send_sensor_data():
-    if scd.data_available:
-        co2 = scd.CO2
-        temperature = scd.temperature
-        humidity = scd.relative_humidity
-        pressure = bmp280.pressure
-        altitude = bmp280.altitude
-        timestamp = get_timestamp_from_rtc()
+    """ Sends sensor data to the Raspberry Pi and logs it to the SD card """
+    if scd30.data_available:
+        try:
+            co2 = scd30.CO2
+            temperature = scd30.temperature
+            humidity = scd30.relative_humidity
+            pressure = bmp280.pressure
+            altitude = bmp280.altitude
+            timestamp = get_timestamp_from_rtc()
+            sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m"
+            sys.stdout.write(sensor_data + "\n")
+            sys.stdout.flush()
+            log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude)
+        except Exception as e:
+            logging.error(f"Failed to send sensor data: {e}")
 
-        sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m\n"
-        print(sensor_data)
-
-        # Log the data to the SD card
-        log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude)
-
-# Function to handle commands from Raspberry Pi
-def handle_commands(command):
-    if command.startswith("SET_TIME"):
-        _, year, month, day, hour, minute, second = command.split(",")
-        rtc.datetime = time.struct_time((int(year), int(month), int(day), int(hour), int(minute), int(second), 0, -1, -1))
-        print(f"RTC time updated to: {year}-{month}-{day} {hour}:{minute}:{second}")
-
-    elif command.startswith("CALIBRATE"):
-        recalibration_value = int(command.split(",")[1])
-        scd.set_forced_recalibration(recalibration_value)
-        timestamp = get_timestamp_from_rtc()
-        log_data_to_csv(timestamp, scd.CO2, scd.temperature, scd.relative_humidity, recalibration=recalibration_value)
-        print(f"Recalibration set to: {recalibration_value} ppm")
-
-    elif command.startswith("FEED"):
-        feed_amount = command.split(",")[1]
-        timestamp = get_timestamp_from_rtc()
-        log_data_to_csv(timestamp, scd.CO2, scd.temperature, scd.relative_humidity, feed_amount=feed_amount)
-        print(f"Feed logged: {feed_amount} grams")
-
-    elif command.startswith("SHUTDOWN"):
-        shutdown_pico()
-
-# Function to shut down the Pico and enter deep sleep
+# Function to handle Pico shutdown and enter deep sleep
 def shutdown_pico():
-    print("Shutting down the Pico... Closing all operations.")
-    time.sleep(2)
-    print("Entering deep sleep...")
-
-    # Setup deep sleep with an alarm pin that wakes it on signal
+    """ Shuts down the Pico safely and enters deep sleep """
+    logging.info("Shutting down Pico and entering deep sleep.")
+    sys.stdout.flush()
+    time.sleep(2)  # Ensure all operations complete
     wake_alarm = alarm.pin.PinAlarm(pin=board.GP15, value=False, pull=True)
     alarm.exit_and_deep_sleep_until_alarms(wake_alarm)
 
-# Wake up and inform Raspberry Pi that the Pico has restarted
-def wake_up_message():
-    print("Pico has restarted after deep sleep.")
-
-if alarm.wake_alarm:
-    wake_up_message()
+# Function to update RTC time from Raspberry Pi command
+def update_rtc_time(year, month, day, hour, minute, second):
+    """ Updates the RTC time based on values received from the Raspberry Pi """
+    rtc.datetime = time.struct_time((year, month, day, hour, minute, second, 0, -1, -1))
+    logging.info(f"RTC time updated to: {year}-{month}-{day} {hour}:{minute}:{second}")
 
 # Main loop
 last_reading_time = time.monotonic()
+
 while True:
     current_time = time.monotonic()
 
@@ -149,17 +133,36 @@ while True:
     if current_time - last_reading_time >= 900:
         try:
             update_scd30_compensation()
+            time.sleep(15)  # Wait for sensor stabilization
             send_sensor_data()
             last_reading_time = current_time
-
         except Exception as e:
-            print(f"Error: {e}")
+            logging.error(f"Error in sensor reading cycle: {e}")
 
     # Continuously check for commands from Raspberry Pi
     try:
         if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
             command = input().strip()
-            handle_commands(command)
+
+            if command.startswith("SET_TIME"):
+                _, year, month, day, hour, minute, second = command.split(",")
+                update_rtc_time(int(year), int(month), int(day), int(hour), int(minute), int(second))
+
+            elif command.startswith("CALIBRATE"):
+                recalibration_value = int(command.split(",")[1])
+                scd30.set_forced_recalibration(recalibration_value)
+                timestamp = get_timestamp_from_rtc()
+                log_data_to_csv(timestamp, scd30.CO2, scd30.temperature, scd30.relative_humidity, recalibration=recalibration_value)
+                logging.info(f"Recalibration set to {recalibration_value} ppm")
+
+            elif command.startswith("FEED"):
+                feed_amount = command.split(",")[1]
+                timestamp = get_timestamp_from_rtc()
+                log_data_to_csv(timestamp, scd30.CO2, scd30.temperature, scd30.relative_humidity, feed_amount=feed_amount)
+                logging.info(f"Feed logged: {feed_amount} grams")
+
+            elif command.startswith("SHUTDOWN"):
+                shutdown_pico()
 
     except Exception as e:
-        print(f"Error processing command: {e}")
+        logging.error(f"Error processing command: {e}")

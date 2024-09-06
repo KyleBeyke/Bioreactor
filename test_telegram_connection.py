@@ -1,50 +1,64 @@
 """
 test_telegram_connection.py
 
-This script tests the Telegram bot connection by sending a message to the chat ID
-using the bot token stored in environment variables.
+This script tests the connection to a Telegram bot by sending a test message to a chat.
+It retrieves the bot token and chat ID from secure environment variables to ensure secure communication.
 
-It verifies whether the bot can successfully send a message and handle errors if the
-connection fails.
-
-Environment Variables:
-- TELEGRAM_BOT_TOKEN: The bot token obtained from BotFather.
-- TELEGRAM_CHAT_ID: The chat ID of the recipient (your Telegram user ID).
-
-Make sure the setup_bioreactor_env.py script has been executed, and the environment
-variables are loaded before running this test.
+Features:
+- Retrieve bot token and chat ID from environment variables.
+- Send a test message to verify the connection.
+- Log the test result for future reference with timestamp and outcome.
 """
 
 import os
 import requests
+import time
+import logging
 
-# Retrieve the bot token and chat ID from environment variables
-bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-chat_id = os.getenv('TELEGRAM_CHAT_ID')
+# Initialize logging for the test result
+LOG_FILE = "telegram_test_log.txt"
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
-# Check if the environment variables are set
-if not bot_token or not chat_id:
-    raise EnvironmentError("Bot token or chat ID is missing. Please ensure environment variables are set.")
-
-# Function to send a test message via Telegram
-def send_test_message(message):
+# Function to send a message via Telegram
+def send_telegram_message(bot_token, chat_id, message):
+    """Send a test message via Telegram to verify the bot connection."""
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     data = {
         'chat_id': chat_id,
         'text': message
     }
-    
     try:
         response = requests.post(url, data=data)
-        if response.status_code == 200:
-            print("Test message sent successfully!")
-        else:
-            print(f"Failed to send message. Status code: {response.status_code}")
-            print("Response:", response.text)
-    except Exception as e:
-        print(f"Error occurred: {e}")
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        logging.info("Message sent successfully!")
+        return True
+    except requests.RequestException as e:
+        logging.error(f"Failed to send message: {e}")
+        return False
 
-# Send a test message to verify the connection
+# Main test function
+def test_telegram_connection():
+    """Main function to test the Telegram bot connection."""
+    # Retrieve bot token and chat ID from environment variables
+    bot_token = os.getenv('BOT_TOKEN')
+    chat_id = os.getenv('CHAT_ID')
+
+    if not bot_token or not chat_id:
+        logging.error("BOT_TOKEN or CHAT_ID environment variables not set.")
+        print("Error: BOT_TOKEN or CHAT_ID environment variables not set.")
+        return
+
+    # Test message with timestamp
+    message = f"Test message sent at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}"
+
+    # Send test message and log the result
+    success = send_telegram_message(bot_token, chat_id, message)
+    if success:
+        logging.info("Connection test passed.")
+        print("Connection test passed.")
+    else:
+        logging.error("Connection test failed.")
+        print("Connection test failed.")
+
 if __name__ == "__main__":
-    test_message = "This is a test message from the Bioreactor system."
-    send_test_message(test_message)
+    test_telegram_connection()

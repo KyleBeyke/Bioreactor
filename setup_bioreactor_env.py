@@ -1,94 +1,118 @@
 """
-This script automates the setup of environment variables for the bioreactor project and encrypts sensitive information (bot token and chat ID).
-It ensures that environment variables are securely stored and made available to the project.
-This script also creates a .env file and sets the appropriate permissions to enhance security.
+setup_bioreactor_env.py
 
-Main Functions:
-- generate_key: Generates an encryption key to securely store sensitive information.
-- store_encrypted_data: Encrypts and stores bot token and chat ID.
-- set_env_variables: Creates a .env file and sets environment variables automatically.
-- validate_env_variables: Validates that the environment variables are set correctly.
+This script sets up the environment for the bioreactor project by configuring environment variables 
+for the bot token and chat ID. It uses encryption to securely store these sensitive values and ensures 
+they are loaded from an .env file. The script also automates the setup process, validates Telegram connection, 
+and sets file permissions for security.
+
+Features:
+- Set environment variables for bot token and chat ID.
+- Encrypt sensitive data using Fernet encryption.
+- Store encrypted data in a secure location.
+- Automate the setup process and run a connection test.
+- Use a .env file for secure storage of credentials.
 """
 
 import os
-import base64
 from cryptography.fernet import Fernet
-import getpass
+import subprocess
+from dotenv import load_dotenv
+from pathlib import Path
 
-# Configuration directory
-CONFIG_DIR = os.path.expanduser("~/.config/bioreactor_secure_config")
-os.makedirs(CONFIG_DIR, exist_ok=True)
+# Load environment variables from .env file
+env_path = Path('.') / '.env'
+if not env_path.exists():
+    # Create an empty .env file if it doesn't exist
+    with open(env_path, 'w') as f:
+        pass
 
-# Encryption key file path
-KEY_FILE_PATH = os.path.join(CONFIG_DIR, "secret_key.key")
+# Define the secure config directory
+config_dir = os.path.expanduser("~/.config/bioreactor_secure_config")
+os.makedirs(config_dir, exist_ok=True)
 
-# Function to generate encryption key and save it to a file
-def generate_key():
+# Path to store the encryption key and encrypted data
+key_file_path = os.path.join(config_dir, "secret_key.key")
+secure_file_path = os.path.join(config_dir, "encrypted_data.txt")
+
+# Function to generate a new encryption key
+def generate_encryption_key():
+    """Generate a new Fernet encryption key and store it in a secure file."""
     key = Fernet.generate_key()
-    with open(KEY_FILE_PATH, 'wb') as key_file:
+    with open(key_file_path, "wb") as key_file:
         key_file.write(key)
-    print(f"Encryption key generated and stored at {KEY_FILE_PATH}")
+    os.chmod(key_file_path, 0o600)  # Set file permissions (read/write for the owner only)
+    print(f"Encryption key saved at: {key_file_path}")
     return key
 
-# Function to encrypt and store bot token and chat ID securely
-def store_encrypted_data(key):
-    cipher_suite = Fernet(key)
+# Function to load the encryption key
+def load_encryption_key():
+    """Load the encryption key from the secure key file."""
+    with open(key_file_path, "rb") as key_file:
+        return key_file.read()
 
-    bot_token = getpass.getpass(prompt="Enter your bot token: ")
-    chat_id = input("Enter your chat ID: ")
-
+# Function to encrypt and store sensitive data
+def encrypt_and_store_data(bot_token, chat_id):
+    """Encrypt and store the bot token and chat ID in a secure file."""
+    cipher_suite = Fernet(load_encryption_key())
     encrypted_bot_token = cipher_suite.encrypt(bot_token.encode())
     encrypted_chat_id = cipher_suite.encrypt(chat_id.encode())
 
-    secure_file_path = os.path.join(CONFIG_DIR, "encrypted_data.txt")
-    with open(secure_file_path, 'wb') as file:
+    with open(secure_file_path, "wb") as file:
         file.write(encrypted_bot_token + b'\n' + encrypted_chat_id)
 
-    # Set file permissions to owner-only access
-    os.chmod(secure_file_path, 0o600)
-    print(f"Encrypted data stored securely in {secure_file_path}")
+    os.chmod(secure_file_path, 0o600)  # Set file permissions (read/write for the owner only)
+    print(f"Encrypted data saved at: {secure_file_path}")
 
-# Function to create the .env file with environment variables
-def set_env_variables():
-    env_file_path = os.path.join(os.getcwd(), ".env")
-    with open(env_file_path, 'w') as env_file:
-        env_file.write(f"CONFIG_DIR={CONFIG_DIR}\n")
-        env_file.write(f"KEY_FILE_PATH={KEY_FILE_PATH}\n")
+# Function to set environment variables from encrypted data
+def set_env_from_encrypted_data():
+    """Decrypt the stored bot token and chat ID, then set them as environment variables."""
+    cipher_suite = Fernet(load_encryption_key())
 
-    # Set file permissions to owner-only access
-    os.chmod(env_file_path, 0o600)
-    print(f"Environment variables set and stored in {env_file_path}")
+    with open(secure_file_path, "rb") as file:
+        encrypted_bot_token = file.readline().strip()
+        encrypted_chat_id = file.readline().strip()
 
-# Function to validate that environment variables are set correctly
-def validate_env_variables():
-    config_dir = os.getenv('CONFIG_DIR')
-    key_file_path = os.getenv('KEY_FILE_PATH')
+    bot_token = cipher_suite.decrypt(encrypted_bot_token).decode()
+    chat_id = cipher_suite.decrypt(encrypted_chat_id).decode()
 
-    if not config_dir or not key_file_path:
-        print("Environment variables are not set correctly.")
+    # Write decrypted values to .env file
+    with open(env_path, 'w') as f:
+        f.write(f"BOT_TOKEN={bot_token}\n")
+        f.write(f"CHAT_ID={chat_id}\n")
+
+    os.environ['BOT_TOKEN'] = bot_token
+    os.environ['CHAT_ID'] = chat_id
+    print("Environment variables BOT_TOKEN and CHAT_ID have been set.")
+
+# Function to run the connection test
+def run_connection_test():
+    """Run a test script to verify the Telegram connection."""
+    print("Running connection test...")
+    result = subprocess.run(["python3", "test_telegram_connection.py"], capture_output=True)
+    if result.returncode == 0:
+        print("Connection test passed.")
     else:
-        print(f"Environment variables loaded successfully: \nCONFIG_DIR: {config_dir}\nKEY_FILE_PATH: {key_file_path}")
+        print(f"Connection test failed. Output: {result.stdout.decode()}\n{result.stderr.decode()}")
 
-# Main setup process
+# Main setup function
 def main():
-    print("Setting up bioreactor environment...")
+    """Main function to set up the environment and test the connection."""
+    if not os.path.exists(key_file_path):
+        print("No encryption key found. Generating a new key...")
+        generate_encryption_key()
 
-    # Generate encryption key and store encrypted data
-    if not os.path.exists(KEY_FILE_PATH):
-        key = generate_key()
-    else:
-        with open(KEY_FILE_PATH, 'rb') as key_file:
-            key = key_file.read()
-        print("Encryption key loaded from existing file.")
+    bot_token = input("Enter your bot token: ")
+    chat_id = input("Enter your chat ID: ")
 
-    # Store encrypted bot token and chat ID
-    store_encrypted_data(key)
+    encrypt_and_store_data(bot_token, chat_id)
+    set_env_from_encrypted_data()
+    run_connection_test()
 
-    # Set environment variables
-    set_env_variables()
-
-    # Validate environment variables
-    validate_env_variables()
+    # Suggest adding the config directory to .gitignore
+    with open(".gitignore", "a") as gitignore:
+        gitignore.write(f"\n# Ignore bioreactor secure config\n{config_dir}\n")
+    print(f"{config_dir} has been added to .gitignore.")
 
 if __name__ == "__main__":
     main()
