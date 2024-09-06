@@ -1,14 +1,21 @@
 """
-This script controls a bioreactor's Raspberry Pi using a Pico microcontroller. It communicates with the Pico via serial connection and performs various tasks such as time synchronization, sending commands to the Pico, handling sensor data, and sending notifications via Telegram.
+This script controls a bioreactor's Raspberry Pi using a Pico microcontroller. 
+It communicates with the Pico via serial connection and performs various tasks such as time synchronization, 
+sending commands to the Pico, handling sensor data, and sending notifications via Telegram.
+
 The main functions of this script are:
-- send_telegram_message: Sends a message via Telegram using a bot token and chat ID.
+- send_telegram_message: Sends a message via Telegram using a bot token and chat ID from environment variables.
 - log_command: Logs commands issued to the Pico in a CSV file.
 - sync_time_with_pico: Sends a time synchronization command to the Pico.
 - wake_pico: Wakes up the Pico from deep sleep.
 - periodic_time_sync: Periodically syncs the time with the Pico.
+- set_co2_threshold: Allows users to set a custom CO2 warning threshold.
+- view_co2_threshold: Displays the current CO2 threshold in ppm.
 - main: The main loop of the script that handles sensor data, time synchronization, and user input for commands.
+
 The script also defines some constants and variables for calibration, CO2 threshold, and tracking the state of CO2 levels.
-Note: This script requires the following dependencies: serial, time, csv, RPi.GPIO, cryptography.fernet, and requests.
+
+Note: This script requires the following dependencies: serial, time, csv, RPi.GPIO, and requests.
 """
 
 import serial
@@ -16,9 +23,7 @@ import time
 import csv
 import os  # To access environment variables and file paths
 import RPi.GPIO as GPIO  # Import for controlling GPIO pins (used to wake the Pico)
-from cryptography.fernet import Fernet
 import requests
-import base64  # Needed for encoding/decoding keys
 
 # GPIO setup for waking up the Pico
 WAKE_PIN = 17  # Choose an available GPIO pin on the Raspberry Pi (GPIO17 in this case)
@@ -31,26 +36,13 @@ ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)  # Adjust port as needed
 # CSV file for logging commands on the Pi
 filename = "commands_log.csv"
 
-# Decrypt the stored bot token and chat ID from the secure file
-def decrypt_data():
-    secure_file_path = os.path.expanduser("~/.config/bioreactor_secure_config")
-    
-    # Load the encrypted data from the file
-    with open(secure_file_path) as f:
-        lines = f.readlines()
-        encryption_key = base64.urlsafe_b64decode(lines[0].split('=')[1].strip())
-        encrypted_bot_token = lines[1].split('=')[1].strip()
-        encrypted_chat_id = lines[2].split('=')[1].strip()
+# Load bot token and chat ID from environment variables
+bot_token = os.getenv("BOT_TOKEN")
+chat_id = os.getenv("CHAT_ID")
 
-    # Decrypt the bot token and chat ID
-    cipher_suite = Fernet(encryption_key)
-    bot_token = cipher_suite.decrypt(encrypted_bot_token.encode()).decode()
-    chat_id = cipher_suite.decrypt(encrypted_chat_id.encode()).decode()
-
-    return bot_token, chat_id
-
-# Use the decrypted values in the application
-bot_token, chat_id = decrypt_data()
+# Ensure the environment variables are set
+if not bot_token or not chat_id:
+    raise EnvironmentError("Bot token or chat ID environment variable not set. Ensure 'BOT_TOKEN' and 'CHAT_ID' are set.")
 
 # Function to send a message via Telegram
 def send_telegram_message(message):
@@ -106,6 +98,23 @@ co2_threshold = calibration_value * 1.2  # 120% of the calibration value
 threshold_crossed = False  # Has CO2 exceeded the threshold?
 alert_sent = False  # Ensure one alert is sent until the CO2 crosses the threshold again
 
+# Function to set a new CO2 threshold
+def set_co2_threshold():
+    global co2_threshold
+    try:
+        new_threshold_percentage = float(input("Enter the new CO2 threshold as a percentage of the calibration value (e.g., 120 for 120%): "))
+        if new_threshold_percentage > 0:
+            co2_threshold = calibration_value * (new_threshold_percentage / 100)
+            print(f"CO2 threshold updated to {co2_threshold:.2f} ppm")
+        else:
+            print("Threshold percentage must be greater than zero.")
+    except ValueError:
+        print("Invalid input. Please enter a valid number.")
+
+# Function to view the current CO2 threshold
+def view_co2_threshold():
+    print(f"Current CO2 threshold: {co2_threshold:.2f} ppm")
+
 # Main loop
 time_sync_generator = periodic_time_sync()
 
@@ -131,7 +140,7 @@ try:
 
                 # If CO2 falls below the threshold after exceeding it
                 if threshold_crossed and not alert_sent and co2 < co2_threshold:
-                    message = f"ALERT: CO2 level has fallen below {co2_threshold} ppm! Current value: {co2} ppm."
+                    message = f"ALERT: CO2 level has fallen below {co2_threshold:.2f} ppm! Current value: {co2:.2f} ppm."
                     send_telegram_message(message)
                     alert_sent = True
                     print(f"Notification sent: CO2 level below {co2_threshold} ppm")
@@ -145,7 +154,7 @@ try:
         next(time_sync_generator)
 
         # Get user input for commands to send to the Pico
-        command = input("Enter 'f' for feed, 'c' for recalibration, 's' for shutdown, 'r' for restart, or 'e' to exit: ").lower()
+        command = input("Enter 'f' for feed, 'c' for recalibration, 's' for shutdown, 'r' for restart, 't' to set a new CO2 threshold, 'w' to view the current threshold, or 'e' to exit: ").lower()
 
         if command == 'f':
             feed_amount = input("Enter feed amount (in grams): ")
@@ -171,6 +180,14 @@ try:
             # Wake the Pico by toggling the GPIO pin
             wake_pico()
             print("Pico has been restarted")
+
+        elif command == 't':
+            # Set a new CO2 threshold
+            set_co2_threshold()
+
+        elif command == 'w':
+            # View the current CO2 threshold
+            view_co2_threshold()
 
         elif command == 'e':
             print("Exiting program...")

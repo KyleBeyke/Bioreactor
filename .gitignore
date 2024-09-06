@@ -3,3 +3,4 @@ secret_key.key
 encrypted_data.txt
 send_notification.py
 bioreactor.code-workspace
+.DS_Store
