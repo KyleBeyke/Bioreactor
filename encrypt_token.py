@@ -1,91 +1,65 @@
 """
-This script provides functions for encrypting and storing sensitive data, such as a Telegram bot token and chat ID, in a secure file with restricted access. It also includes a function for decrypting the stored data when needed.
-Functions:
-- generate_key(): Generates an encryption key using the Fernet encryption algorithm.
-- get_telegram_credentials(): Prompts the user for the Telegram bot token and chat ID.
-- encrypt_data(encryption_key, bot_token, chat_id): Encrypts the bot token and chat ID using the provided encryption key.
-- store_encrypted_data(encryption_key, encrypted_bot_token, encrypted_chat_id): Stores the encrypted data in a secure file with restricted access.
-- decrypt_data(): Decrypts the stored bot token and chat ID.
+Encrypts sensitive data and stores it securely in a file.
+This script generates a key for encryption and decryption using the Fernet cryptography library. It prompts the user to enter their bot token and chat ID, encrypts the values, and saves them to a file. The encrypted values are stored in a secure configuration directory along with the encryption key. The script also sets strict file permissions to ensure that only the owner can read and write the files.
+After encryption, it suggests adding the configuration directory to the .gitignore file to avoid committing it to version control. Finally, it runs a test script to verify the connection to Telegram.
+Note: Make sure to keep the 'secret_key.key' file safe as it is required for decryption.
 Usage:
-1. Generate the encryption key using the generate_key() function.
-2. Get the Telegram bot token and chat ID from the user using the get_telegram_credentials() function.
-3. Encrypt the bot token and chat ID using the encrypt_data() function.
-4. Store the encrypted data in a secure file using the store_encrypted_data() function.
-5. When needed, decrypt the stored bot token and chat ID using the decrypt_data() function.
-Note: The secure file path is set to "~/.config/bioreactor_secure_config" and the file is readable only by the user.
+    - Run the script and follow the prompts to enter the bot token and chat ID.
+    - The encrypted values will be stored in the 'encrypted_data.txt' file.
+    - The encryption key will be stored in the 'secret_key.key' file.
+    - The configuration directory will be created at '~/.config/bioreactor_secure_config'.
+    - The 'encrypted_data.txt' and 'secret_key.key' files will have strict file permissions (read and write only for the owner).
+    - The configuration directory will be added to the .gitignore file.
+Example:
+    $ python encrypt_token.py
+    Enter your bot token: <enter bot token>
+    Enter your chat ID: <enter chat ID>
+    Encryption complete. Files are stored securely in ~/.config/bioreactor_secure_config.
+    Remember to keep the 'secret_key.key' file safe!
+    Running connection test...
 """
 
 import os
-import base64
-import subprocess
 from cryptography.fernet import Fernet
+import subprocess
 
-# Step 1: Generate an encryption key
-def generate_key():
-    key = Fernet.generate_key()
-    print(f"Generated encryption key: {key.decode()}")
-    return key
+# Generate a key for encryption and decryption
+key = Fernet.generate_key()
+cipher_suite = Fernet(key)
 
-# Step 2: Prompt the user for the Telegram bot token and chat ID
-def get_telegram_credentials():
-    bot_token = input("Enter your Telegram bot token: ")
-    chat_id = input("Enter your Telegram chat ID: ")
-    return bot_token, chat_id
+# The sensitive data (your bot token and chat ID)
+bot_token = input("Enter your bot token: ")
+chat_id = input("Enter your chat ID: ")
 
-# Step 3: Encrypt the bot token and chat ID
-def encrypt_data(encryption_key, bot_token, chat_id):
-    cipher_suite = Fernet(encryption_key)
-    encrypted_bot_token = cipher_suite.encrypt(bot_token.encode())
-    encrypted_chat_id = cipher_suite.encrypt(chat_id.encode())
-    return encrypted_bot_token, encrypted_chat_id
+# Encrypt the bot token and chat ID
+encrypted_bot_token = cipher_suite.encrypt(bot_token.encode())
+encrypted_chat_id = cipher_suite.encrypt(chat_id.encode())
 
-# Step 4: Store the encrypted data in a secure file with restricted access
-def store_encrypted_data(encryption_key, encrypted_bot_token, encrypted_chat_id):
-    secure_file_path = os.path.expanduser("~/.config/bioreactor_secure_config")
-    print(f"Storing encrypted data in {secure_file_path} with restricted permissions...")
+# Create the config directory if it doesn't exist
+config_dir = os.path.expanduser("~/.config/bioreactor_secure_config")
+os.makedirs(config_dir, exist_ok=True)
 
-    # Write the encrypted data to the secure file
-    with open(secure_file_path, "w") as f:
-        f.write(f"ENCRYPTION_KEY={base64.urlsafe_b64encode(encryption_key).decode()}\n")
-        f.write(f"ENCRYPTED_BOT_TOKEN={encrypted_bot_token.decode()}\n")
-        f.write(f"ENCRYPTED_CHAT_ID={encrypted_chat_id.decode()}\n")
+# Save the encrypted values to a file
+secure_file_path = os.path.join(config_dir, "encrypted_data.txt")
+with open(secure_file_path, "wb") as file:
+    file.write(encrypted_bot_token + b'\n' + encrypted_chat_id)
 
-    # Restrict file access (readable only by the user)
-    os.chmod(secure_file_path, 0o600)
-    print(f"Encrypted data stored in {secure_file_path} with restricted permissions.")
+# Save the encryption key to a separate file
+key_file_path = os.path.join(config_dir, "secret_key.key")
+with open(key_file_path, "wb") as key_file:
+    key_file.write(key)
 
-# Step 5: Decrypt the stored bot token and chat ID when needed
-def decrypt_data():
-    secure_file_path = os.path.expanduser("~/.config/bioreactor_secure_config")
+# Set strict file permissions (read and write only for the owner)
+os.chmod(secure_file_path, 0o600)  # Owner read/write permissions
+os.chmod(key_file_path, 0o600)     # Owner read/write permissions
+
+print(f"Encryption complete. Files are stored securely in {config_dir}.")
+print("Remember to keep the 'secret_key.key' file safe!")
+
+# Suggest adding the config directory to .gitignore to avoid committing it to version control
+with open(".gitignore", "a") as gitignore:
+    gitignore.write(f"\n# Ignore bioreactor secure config\n{config_dir}\n")
     
-    # Load the encrypted data from the file
-    with open(secure_file_path) as f:
-        lines = f.readlines()
-        encryption_key = base64.urlsafe_b64decode(lines[0].split('=')[1].strip())
-        encrypted_bot_token = lines[1].split('=')[1].strip()
-        encrypted_chat_id = lines[2].split('=')[1].strip()
-
-    # Decrypt the bot token and chat ID
-    cipher_suite = Fernet(encryption_key)
-    bot_token = cipher_suite.decrypt(encrypted_bot_token.encode()).decode()
-    chat_id = cipher_suite.decrypt(encrypted_chat_id.encode()).decode()
-
-    return bot_token, chat_id
-
-if __name__ == "__main__":
-    # Generate the encryption key
-    encryption_key = generate_key()
-
-    # Get Telegram credentials from the user
-    bot_token, chat_id = get_telegram_credentials()
-
-    # Encrypt the bot token and chat ID
-    encrypted_bot_token, encrypted_chat_id = encrypt_data(encryption_key, bot_token, chat_id)
-
-    # Store the encrypted data in a secure file with restricted access
-    store_encrypted_data(encryption_key, encrypted_bot_token, encrypted_chat_id)
-
-    # Test: Decrypt the stored values
-    decrypted_bot_token, decrypted_chat_id = decrypt_data()
-    print(f"\nDecrypted Bot Token: {decrypted_bot_token}")
-    print(f"Decrypted Chat ID: {decrypted_chat_id}")
+# After encryption, run the test script to verify Telegram connection
+print("Running connection test...")
+subprocess.run(["python3", "test_telegram_connection.py"])
