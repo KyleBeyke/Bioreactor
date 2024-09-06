@@ -63,13 +63,13 @@ You can download these from the [Adafruit CircuitPython Library Bundle](https://
 
 ### 1. Install CircuitPython on Raspberry Pi Pico
 
-Follow the [Adafruit guide](https://learn.adafruit.com/welcome-to-circuitpython) to install CircuitPython on the Pico. After installation, copy the necessary libraries into the `lib` folder on the Pico’s **CIRCUITPY** drive.
+Follow the Adafruit guide to install CircuitPython on the Pico. After installation, copy the necessary libraries into the `lib` folder on the Pico’s **CIRCUITPY** drive.
 
 ### 2. Set up the Raspberry Pi 4
 
 Ensure Python 3 is installed on your Raspberry Pi. Use the following command to install Python 3:
 
-sudo apt-get install python3
+`sudo apt-get install python3`
 
 ### 3. Upload the Code to the Raspberry Pi Pico
 
@@ -82,13 +82,28 @@ sudo apt-get install python3
 
 ### 5. Set up Telegram Bot Credentials and Secure Key
 
-1. **Run the `encrypt_token.py` script** to generate an encryption key and encrypt your Telegram bot token and chat ID:
+1. **Create a Telegram bot**:
+   - Open the Telegram app and search for `BotFather`.
+   - Start a chat with **BotFather** and use the command `/newbot` to create a new bot.
+   - Follow the prompts to name your bot and create a unique username for it.
+   - After the bot is created, BotFather will give you a **bot token**. You’ll need this token for your notifications.
 
-python3 encrypt_token.py
+2. **Get your chat ID**:
+   - Start a conversation with your newly created bot by sending a `/start` message.
+   - To find your chat ID, you can use this URL in your browser, replacing `YOUR_BOT_TOKEN` with your actual bot token:
+     `https://api.telegram.org/botYOUR_BOT_TOKEN/getUpdates`
+   - This will return a JSON object where you can find your **chat ID**.
 
-2. **Follow the prompts** to input your Telegram bot token and chat ID.
+3. **Run the encrypt_token.py script**:
+   This script will prompt you for your **Telegram bot token** and **chat ID**, and it will generate an encryption key. It will store the encrypted token and chat ID in a secure file located at `~/.config/bioreactor_secure_config`. 
 
-3. The script will store the encrypted values in the secure configuration file (`~/.config/bioreactor_secure_config`) and protect it with strict file permissions.
+4. To run the script, use:
+
+`python3 encrypt_token.py`
+
+5. The sensitive data will be stored securely in the `~/.config/bioreactor_secure_config` file, and this file will be protected by strict file permissions (only readable by the user).
+
+6. Once the bot token and chat ID are encrypted and stored securely, the `pi_control_system.py` script will automatically decrypt and use these values to send notifications via Telegram.
 
 ---
 
@@ -98,7 +113,7 @@ python3 encrypt_token.py
 
  - Run the following command on your Raspberry Pi to start the control system:
 
-python3 pi_control_system.py
+`python3 pi_control_system.py`
 
 ### 2. Using the Raspberry Pi Console
 
