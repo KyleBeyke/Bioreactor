@@ -1,0 +1,13 @@
+2024-09-07 11:24:46,774 INFO: RTC time received: 2024-09-07 11:24:46
+2024-09-07 11:24:46,774 INFO: Fake sensor data received: CO2: 884.39 ppm, Temp: 18.03 °C, Humidity: 71.19 %
+2024-09-07 11:24:59,920 INFO: Fake sensor data received: CO2: 446.34 ppm, Temp: 19.66 °C, Humidity: 37.17 %
+2024-09-07 11:25:18,398 WARNING: Invalid command entered
+2024-09-07 11:25:20,405 INFO: Fake sensor data received: CO2: 958.49 ppm, Temp: 28.52 °C, Humidity: 75.15 %
+2024-09-07 11:25:31,114 INFO: Feed command executed: 100 grams
+2024-09-07 11:25:33,117 INFO: Fake sensor data received: CO2: 715.55 ppm, Temp: 29.08 °C, Humidity: 48.21 %
+2024-09-07 11:25:38,522 INFO: Shutdown command executed
+2024-09-07 11:25:40,526 INFO: Fake sensor data received: CO2: 940.36 ppm, Temp: 26.16 °C, Humidity: 65.56 %
+2024-09-07 11:25:45,855 INFO: Restart command executed
+2024-09-07 11:25:47,860 INFO: Fake sensor data received: CO2: 505.80 ppm, Temp: 16.51 °C, Humidity: 74.29 %
+2024-09-07 11:25:54,900 INFO: Calibration command executed: 400 ppm
+2024-09-07 11:25:56,901 INFO: Fake sensor data received: CO2: 442.56 ppm, Temp: 28.91 °C, Humidity: 59.15 %
