@@ -11,19 +11,19 @@ It supports:
 """
 
 import time
-import board
-import busio
-import adafruit_scd30
-import adafruit_bmp280
-import adafruit_ds3231
-import storage
-import sdcardio
-import digitalio
+import board # type: ignore
+import busio # type: ignore
+import adafruit_scd30 # type: ignore
+import adafruit_bmp280 # type: ignore
+import adafruit_ds3231 # type: ignore
+import storage # type: ignore
+import sdcardio # type: ignore
+import digitalio # type: ignore
 import csv
 import sys
 import select
-import microcontroller  # Used for safe shutdown and reset
-import alarm  # Used for deep sleep and wake-up
+import microcontroller # type: ignore  # Used for safe shutdown and reset
+import alarm # type: ignore  # Used for deep sleep and wake-up
 import logging
 
 # Initialize logging
