@@ -5,9 +5,9 @@ This script controls the bioreactor's Raspberry Pi, which communicates with a Pi
 The script manages:
 - Sensor data acquisition (CO2, temperature, etc.)
 - Commands (feed, calibration, shutdown, restart)
-- Time synchronization between Raspberry Pi and Pico
-- Sending alerts via Telegram when CO2 levels cross a threshold
-- Logging commands and data for debugging and analysis
+- Time synchronization with Pico's RTC.
+- Sending alerts via Telegram when CO2 levels cross a threshold.
+- Logging commands and data for debugging and analysis.
 
 Refined with modularity, error handling, logging, and environment variable support for secure operations.
 """
@@ -17,7 +17,7 @@ import time
 import csv
 import os
 import logging
-import RPi.GPIO as GPIO # type: ignore
+import RPi.GPIO as GPIO
 from cryptography.fernet import Fernet
 import requests
 
@@ -93,17 +93,20 @@ def log_command(command):
     except Exception as e:
         logging.error(f"Failed to log command: {e}")
 
-# Time synchronization with Pico
-def sync_time_with_pico(ser):
-    """Sends time sync command to the Pico."""
-    current_time = time.localtime()
-    time_sync_command = f"SET_TIME,{current_time.tm_year},{current_time.tm_mon},{current_time.tm_mday},{current_time.tm_hour},{current_time.tm_min},{current_time.tm_sec}\n"
+# Function to request RTC time from the Pico
+def request_rtc_time(ser):
+    """Requests the RTC time from the Pico."""
     try:
-        ser.write(time_sync_command.encode())
-        log_command(time_sync_command)
-        logging.info(f"Time synchronized with Pico: {time_sync_command}")
-    except serial.SerialException as e:
-        logging.error(f"Serial write error during time sync: {e}")
+        ser.write("REQUEST_RTC_TIME\n".encode())
+        while True:
+            if ser.in_waiting > 0:
+                response = ser.readline().decode('utf-8').strip()
+                if "RTC_TIME" in response:
+                    rtc_time = response.split(",")[1]
+                    logging.info(f"RTC time received: {rtc_time}")
+                    return rtc_time
+    except Exception as e:
+        logging.error(f"Failed to request RTC time: {e}")
 
 # Wake up the Pico from deep sleep
 def wake_pico():
@@ -121,7 +124,7 @@ def control_loop():
     """Main loop to handle Pico communication and commands."""
     try:
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT)
-        sync_time_with_pico(ser)  # Initial time sync
+        rtc_time = request_rtc_time(ser)  # Get RTC time on startup
     except serial.SerialException as e:
         logging.error(f"Failed to open serial port: {e}")
         return

@@ -8,8 +8,6 @@ It supports:
 - Responding to commands (feed operations, recalibration, shutdown).
 - Synchronizing time with the Raspberry Pi.
 - Entering deep sleep and waking via GPIO.
-
-The script includes error handling, logging, and improved modularity.
 """
 
 import time
@@ -90,6 +88,13 @@ def get_timestamp_from_rtc():
     now = rtc.datetime
     return f"{now.tm_year}-{now.tm_mon:02}-{now.tm_mday:02} {now.tm_hour:02}:{now.tm_min:02}:{now.tm_sec:02}"
 
+# Function to send the RTC time to the Raspberry Pi on request
+def send_rtc_time():
+    """ Send RTC time to the Raspberry Pi when requested """
+    timestamp = get_timestamp_from_rtc()
+    sys.stdout.write(f"RTC_TIME,{timestamp}\n")
+    sys.stdout.flush()
+
 # Function to send sensor data to the Raspberry Pi
 def send_sensor_data():
     """ Sends sensor data to the Raspberry Pi and logs it to the SD card """
@@ -147,6 +152,9 @@ while True:
             if command.startswith("SET_TIME"):
                 _, year, month, day, hour, minute, second = command.split(",")
                 update_rtc_time(int(year), int(month), int(day), int(hour), int(minute), int(second))
+
+            elif command == "REQUEST_RTC_TIME":
+                send_rtc_time()
 
             elif command.startswith("CALIBRATE"):
                 recalibration_value = int(command.split(",")[1])

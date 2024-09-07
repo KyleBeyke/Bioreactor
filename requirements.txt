@@ -1,5 +1,7 @@
 # External libraries required for the bioreactor project
+# These libraries can be installed using the command `pip install -r requirements.txt`
 
+# Dotenv for environment variable management
 python.dotenv
 
 # Communication and GPIO control
@@ -12,8 +14,9 @@ cryptography
 # HTTP requests for Telegram API
 requests
 
-# CircuitPython libraries for sensors and microcontroller support
-adafruit-circuitpython-scd30
-adafruit-circuitpython-bmp280
-adafruit-circuitpython-ds3231
-adafruit-circuitpython-sdcard
+# CircuitPython libraries for sensors and microcontroller support, these are included
+# adafruit-circuitpython-scd30
+# adafruit-circuitpython-bmp280
+# adafruit-circuitpython-ds3231
+# adafruit-circuitpython-sdcard
+# adafruit-circuitpython-busdevice
