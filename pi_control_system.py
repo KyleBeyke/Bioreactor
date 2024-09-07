@@ -119,6 +119,20 @@ def wake_pico():
     except Exception as e:
         logging.error(f"Error waking up Pico: {e}")
 
+# Function to display the help menu
+def show_help_menu():
+    """Displays the available command options."""
+    help_menu = """
+    /help : Show this help menu
+    /f : Feed - Enter the feed amount in grams
+    /c : Calibrate - Enter the CO2 value for recalibration
+    /s : Shutdown the system
+    /r : Restart the Pico from deep sleep
+    /t : Set CO2 threshold value
+    /e : Exit the control loop
+    """
+    print(help_menu)
+
 # Main control function
 def control_loop():
     """Main loop to handle Pico communication and commands."""
@@ -139,37 +153,40 @@ def control_loop():
                     logging.info(f"Received data: {sensor_data}")
 
             # Get user input for commands
-            command = input("Enter command ('f': feed, 'c': calibrate, 's': shutdown, 'r': restart, 't': set threshold, 'e': exit): ").lower()
+            command = input("Enter command (use '/help' for a list of commands): ").lower()
             
-            if command == 'f':
+            if command == '/help':
+                show_help_menu()
+
+            elif command == '/f':
                 feed_amount = input("Enter feed amount (grams): ")
                 feed_command = f"FEED,{feed_amount}\n"
                 ser.write(feed_command.encode())
                 log_command(feed_command)
                 logging.info(f"Feed command sent: {feed_amount} grams")
 
-            elif command == 'c':
+            elif command == '/c':
                 co2_value = input("Enter CO2 value for recalibration: ")
                 recalibration_command = f"CALIBRATE,{co2_value}\n"
                 ser.write(recalibration_command.encode())
                 log_command(recalibration_command)
                 logging.info(f"Recalibration command sent for {co2_value} ppm")
 
-            elif command == 's':
+            elif command == '/s':
                 shutdown_command = "SHUTDOWN\n"
                 ser.write(shutdown_command.encode())
                 log_command(shutdown_command)
                 logging.info("Shutdown command sent to Pico")
 
-            elif command == 'r':
+            elif command == '/r':
                 wake_pico()
                 logging.info("Restart command executed (woke Pico)")
 
-            elif command == 't':
+            elif command == '/t':
                 new_threshold = input("Enter new CO2 threshold: ")
                 logging.info(f"New CO2 threshold set: {new_threshold}")
 
-            elif command == 'e':
+            elif command == '/e':
                 logging.info("Exiting control loop")
                 break
 
