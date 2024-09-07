@@ -1,5 +1,7 @@
 # External libraries required for the bioreactor project
 
+python.dotenv
+
 # Communication and GPIO control
 RPi.GPIO
 pyserial

@@ -37,6 +37,7 @@ pip install -r requirements.txt
 
 ### Included Libraries
 
+- `python.dotenv`
 - `serial`
 - `RPi.GPIO`
 - `cryptography`

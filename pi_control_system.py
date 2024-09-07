@@ -17,7 +17,7 @@ import time
 import csv
 import os
 import logging
-import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO # type: ignore
 from cryptography.fernet import Fernet
 import requests
 
