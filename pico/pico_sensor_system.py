@@ -19,7 +19,6 @@ import adafruit_ds3231 # type: ignore
 import storage # type: ignore
 import sdcardio # type: ignore
 import digitalio # type: ignore
-import csv
 import sys
 import select
 import microcontroller # type: ignore  # Used for safe shutdown and reset
@@ -49,23 +48,29 @@ storage.mount(vfs, "/sd")
 # CSV file for logging sensor data
 DATA_LOG_FILE = "/sd/sensor_data.csv"
 
-# Function to log data to the CSV file
+# Function to log data manually in CSV format with a header
 def log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitude=None, feed_amount=None, recalibration=None):
-    """ Logs sensor data to CSV file on SD card """
+    """ Logs sensor data manually to CSV file on SD card, adds header if file is empty """
     try:
-        with open(DATA_LOG_FILE, mode='a', newline='') as csvfile:
-            fieldnames = ['timestamp', 'CO2', 'temperature', 'humidity', 'pressure', 'altitude', 'feed_amount', 'recalibration']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writerow({
-                'timestamp': timestamp,
-                'CO2': co2,
-                'temperature': temperature,
-                'humidity': humidity,
-                'pressure': pressure,
-                'altitude': altitude,
-                'feed_amount': feed_amount,
-                'recalibration': recalibration
-            })
+        # Check if the file exists and if it's empty
+        file_exists = False
+        try:
+            with open(DATA_LOG_FILE, 'r') as file:
+                file_exists = True
+        except OSError:
+            # File doesn't exist yet, so we will create it and add a header
+            pass
+        
+        # Open the file in append mode
+        with open(DATA_LOG_FILE, mode='a') as file:
+            # If file does not exist or is empty, write the header
+            if not file_exists:
+                file.write("timestamp,CO2,temperature,humidity,pressure,altitude,feed_amount,recalibration\n")
+            
+            # Create a CSV row as a string
+            row = f"{timestamp},{co2},{temperature},{humidity},{pressure},{altitude},{feed_amount},{recalibration}\n"
+            # Write the row to the file
+            file.write(row)
         logging.info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%")
     except Exception as e:
         logging.error(f"Failed to log data to CSV: {e}")
