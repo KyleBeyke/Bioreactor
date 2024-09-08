@@ -1,22 +1,46 @@
 """
 pico_sensor_system.py
 
-This script runs on the Raspberry Pi Pico to manage sensor readings and communication with the Raspberry Pi.
+This script runs on the Raspberry Pi Pico to manage sensor readings, log data, and communicate with the Raspberry Pi.
 It supports:
-- Reading data from the SCD30 CO2 sensor, BMP280 pressure sensor, and DS3231 RTC.
-- Logging sensor data to an SD card.
-- Responding to commands (feed operations, recalibration, shutdown).
-- Synchronizing time with the Raspberry Pi.
+- Reading data from the SCD30 CO2 sensor and BMP280 pressure sensor.
+- Logging sensor data to an SD card in CSV format.
+- Responding to commands sent from the Raspberry Pi, such as feed operations, recalibration, and shutdown.
+- Periodically updating altitude and pressure compensation for the SCD30 based on BMP280 readings.
 - Entering deep sleep and waking via GPIO.
+- Outputting sensor data and logs over serial communication.
+
+Key Features:
+- **Sensor Readings**: CO2, temperature, humidity, pressure, and altitude are periodically measured and logged.
+- **Logging**: Sensor data is logged in CSV format on an SD card, and system information is logged to a text file.
+- **Command Handling**: The script listens for commands from the Raspberry Pi over serial, including SET_TIME, FEED, CALIBRATE, and SHUTDOWN.
+- **Power Management**: The Pico can enter deep sleep mode and wake up on GPIO pin activity.
+
+Libraries Used:
+- `adafruit_scd30` for CO2 sensor data.
+- `adafruit_bmp280` for pressure and altitude readings.
+- `adafruit_sdcard` for SD card logging.
+- `busio` and `digitalio` for SPI and I2C communication.
+- `storage` for file system mounting.
+
+Assumptions:
+- The SD card is correctly wired to the SPI bus, and it is formatted as FAT32.
+- The sensors are wired to the appropriate I2C pins on the Pico.
+- The Raspberry Pi will send commands over the serial interface for time synchronization, sensor calibration, and other control operations.
+
+Usage:
+- Ensure all sensors and the SD card module are correctly connected to the Pico.
+- The script will automatically log sensor data every 15 minutes and process incoming commands.
+- Commands can be sent from the Raspberry Pi to trigger feed operations, recalibrate sensors, or shut down the system.
 """
 
 import time
 import board
 import busio
 import adafruit_scd30
-import adafruit_bmp280 # type: ignore
+import adafruit_bmp280
 import digitalio
-import sdcardio
+import adafruit_sdcard
 import storage
 import sys
 import select
@@ -52,10 +76,10 @@ bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 # Disable auto-calibration for SCD30
 scd30.self_calibration_enabled = False
 
-# Setup SPI for SD card
-spi = busio.SPI(board.GP10, board.GP11, board.GP12, baudrate=1000000)  # 1 MHz baudrate
-cs = board.GP13  # Corrected to be of type Pin, as required by sdcardio
-sdcard = sdcardio.SDCard(spi, cs)
+# Setup SPI for SD card using adafruit_sdcard
+spi = busio.SPI(board.GP10, board.GP11, board.GP12)
+cs = digitalio.DigitalInOut(board.GP13)  # Chip select pin for SD card
+sdcard = adafruit_sdcard.SDCard(spi, cs)
 vfs = storage.VfsFat(sdcard)
 storage.mount(vfs, "/sd")
 
