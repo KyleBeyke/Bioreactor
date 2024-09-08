@@ -54,7 +54,7 @@ scd30.self_calibration_enabled = False
 
 # Setup SPI for SD card
 spi = busio.SPI(board.GP10, board.GP11, board.GP12)
-cs = digitalio.DigitalInOut(board.GP13)
+cs = board.GP13  # Corrected to be of type Pin, as required by sdcardio
 sdcard = sdcardio.SDCard(spi, cs)
 vfs = storage.VfsFat(sdcard)
 storage.mount(vfs, "/sd")
