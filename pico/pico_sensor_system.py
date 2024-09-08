@@ -53,7 +53,7 @@ bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 scd30.self_calibration_enabled = False
 
 # Setup SPI for SD card
-spi = busio.SPI(board.GP10, board.GP11, board.GP12)
+spi = busio.SPI(board.GP10, board.GP11, board.GP12, baudrate=1000000)  # 1 MHz baudrate
 cs = board.GP13  # Corrected to be of type Pin, as required by sdcardio
 sdcard = sdcardio.SDCard(spi, cs)
 vfs = storage.VfsFat(sdcard)
