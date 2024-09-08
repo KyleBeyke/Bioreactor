@@ -51,8 +51,10 @@ import alarm
 LOG_FILE = "/sd/pico_log.txt"
 
 def log_info(message):
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     try:
+        # Generate a timestamp manually using localtime()
+        current_time = time.localtime()
+        timestamp = f"{current_time.tm_year}-{current_time.tm_mon:02}-{current_time.tm_mday:02} {current_time.tm_hour:02}:{current_time.tm_min:02}:{current_time.tm_sec:02}"
         with open(LOG_FILE, 'a') as log_file:
             log_file.write(f"{timestamp} INFO: {message}\n")
         print(f"{timestamp} INFO: {message}")
@@ -60,8 +62,10 @@ def log_info(message):
         print(f"Failed to log info: {e}")
 
 def log_error(message):
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     try:
+        # Generate a timestamp manually using localtime()
+        current_time = time.localtime()
+        timestamp = f"{current_time.tm_year}-{current_time.tm_mon:02}-{current_time.tm_mday:02} {current_time.tm_hour:02}:{current_time.tm_min:02}:{current_time.tm_sec:02}"
         with open(LOG_FILE, 'a') as log_file:
             log_file.write(f"{timestamp} ERROR: {message}\n")
         print(f"{timestamp} ERROR: {message}")
