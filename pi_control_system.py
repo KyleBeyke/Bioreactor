@@ -32,7 +32,7 @@ GPIO.setup(WAKE_PIN, GPIO.OUT, initial=GPIO.LOW)
 
 # Serial setup
 SERIAL_PORT = '/dev/ttyACM0'  # Adjust this as necessary
-BAUD_RATE = 9600
+BAUD_RATE = 115200
 TIMEOUT = 1
 
 # CSV file for logging commands on the Pi
