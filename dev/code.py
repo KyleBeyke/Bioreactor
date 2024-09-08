@@ -7,7 +7,7 @@ import os
 
 # SPI configuration for Raspberry Pi Pico
 spi = busio.SPI(board.GP10, board.GP11, board.GP12)
-cs = digitalio.DigitalInOut(board.GP13)
+cs = board.GP13
 
 # Attempt to initialize and mount the SD card
 try:
