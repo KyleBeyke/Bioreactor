@@ -8,8 +8,6 @@ It supports:
 - Responding to commands (feed operations, recalibration, shutdown).
 - Synchronizing time with the Raspberry Pi.
 - Entering deep sleep and waking via GPIO.
-
-The script includes error handling, logging, and improved modularity.
 """
 
 import time
@@ -48,7 +46,7 @@ def log_error(message):
         print(f"Failed to log error: {e}")
 
 # I2C initialization for SCD30 and BMP280
-i2c = busio.I2C(board.GP21, board.GP20, frequency=50000)
+i2c = busio.I2C(board.GP21, board.GP20)
 scd30 = adafruit_scd30.SCD30(i2c)
 bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 
@@ -67,19 +65,8 @@ DATA_LOG_FILE = "/sd/sensor_data.csv"
 
 def log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitude=None, feed_amount=None, recalibration=None):
     try:
-        with open(DATA_LOG_FILE, mode='a', newline='') as csvfile:
-            fieldnames = ['timestamp', 'CO2', 'temperature', 'humidity', 'pressure', 'altitude', 'feed_amount', 'recalibration']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writerow({
-                'timestamp': timestamp,
-                'CO2': co2,
-                'temperature': temperature,
-                'humidity': humidity,
-                'pressure': pressure,
-                'altitude': altitude,
-                'feed_amount': feed_amount,
-                'recalibration': recalibration
-            })
+        with open(DATA_LOG_FILE, mode='a') as csvfile:
+            csvfile.write(f"{timestamp},{co2},{temperature},{humidity},{pressure},{altitude},{feed_amount},{recalibration}\n")
         log_info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Altitude: {altitude} m")
     except Exception as e:
         log_error(f"Failed to log data to CSV: {e}")
@@ -102,18 +89,16 @@ def send_sensor_data():
             humidity = scd30.relative_humidity
             pressure = bmp280.pressure
             altitude = bmp280.altitude
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            timestamp = f"{time.localtime().tm_year}-{time.localtime().tm_mon:02}-{time.localtime().tm_mday:02} {time.localtime().tm_hour:02}:{time.localtime().tm_min:02}:{time.localtime().tm_sec:02}"
             sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m"
             sys.stdout.write(sensor_data + "\n")
-            sys.stdout.flush()
             log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude)
         except Exception as e:
             log_error(f"Failed to send sensor data: {e}")
 
 def shutdown_pico():
     log_info("Shutting down Pico and entering deep sleep.")
-    sys.stdout.flush()
-    time.sleep(2)
+    time.sleep(2)  # Ensure all operations complete
     wake_alarm = alarm.pin.PinAlarm(pin=board.GP15, value=False, pull=True)
     alarm.exit_and_deep_sleep_until_alarms(wake_alarm)
 
@@ -122,7 +107,7 @@ def handle_commands(command):
         if command.startswith("FEED"):
             feed_amount = command.split(",")[1]
             log_info(f"Feed command received: {feed_amount} grams")
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            timestamp = f"{time.localtime().tm_year}-{time.localtime().tm_mon:02}-{time.localtime().tm_mday:02} {time.localtime().tm_hour:02}:{time.localtime().tm_min:02}:{time.localtime().tm_sec:02}"
             log_data_to_csv(timestamp, scd30.CO2, scd30.temperature, scd30.relative_humidity, feed_amount=feed_amount)
         
         elif command.startswith("CALIBRATE"):
@@ -134,15 +119,25 @@ def handle_commands(command):
             shutdown_pico()
 
         elif command == "REQUEST_RTC_TIME":
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            timestamp = f"{time.localtime().tm_year}-{time.localtime().tm_mon:02}-{time.localtime().tm_mday:02} {time.localtime().tm_hour:02}:{time.localtime().tm_min:02}:{time.localtime().tm_sec:02}"
             sys.stdout.write(f"RTC_TIME,{timestamp}\n")
-            sys.stdout.flush()
 
     except Exception as e:
         log_error(f"Failed to handle command: {e}")
 
 # Main control loop
 def control_loop():
+    time.sleep(15)  # Allow time for sensor initialization
+    
+    # Send initial sensor data
+    try:
+        update_scd30_compensation()
+        time.sleep(15)  # Wait for sensor stabilization
+        send_sensor_data()
+        last_reading_time = current_time
+    except Exception as e:
+        log_error(f"Error in sensor reading cycle: {e}")
+
     last_reading_time = time.monotonic()
     
     while True:
