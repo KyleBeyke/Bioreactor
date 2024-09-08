@@ -5,9 +5,11 @@ This script runs on the Raspberry Pi Pico to manage sensor readings and communic
 It supports:
 - Reading data from the SCD30 CO2 sensor, BMP280 pressure sensor, and DS3231 RTC.
 - Logging sensor data to an SD card.
-- Responding to commands (feed operations, recalibration, shutdown).
+- Responding to commands (feed operations, recalibration, shutdown, request data).
 - Synchronizing time with the Raspberry Pi.
 - Entering deep sleep and waking via GPIO.
+
+The script includes error handling, logging, and improved modularity.
 """
 
 import time
@@ -15,6 +17,7 @@ import board
 import busio
 import adafruit_scd30
 import adafruit_bmp280
+import adafruit_ds3231
 import digitalio
 import storage
 import adafruit_sdcard
@@ -25,9 +28,13 @@ import alarm
 # Simple logging functions to mimic logging behavior
 LOG_FILE = "/sd/pico_log.txt"
 
+# Get current time from the RTC
+def get_rtc_time():
+    rtc_time = rtc.datetime
+    return f"{rtc_time.tm_year}-{rtc_time.tm_mon:02}-{rtc_time.tm_mday:02} {rtc_time.tm_hour:02}:{rtc_time.tm_min:02}:{rtc_time.tm_sec:02}"
+
 def log_info(message):
-    current_time = time.localtime()
-    timestamp = f"{current_time.tm_year}-{current_time.tm_mon:02}-{current_time.tm_mday:02} {current_time.tm_hour:02}:{current_time.tm_min:02}:{current_time.tm_sec:02}"
+    timestamp = get_rtc_time()
     try:
         with open(LOG_FILE, 'a') as log_file:
             log_file.write(f"{timestamp} INFO: {message}\n")
@@ -36,8 +43,7 @@ def log_info(message):
         print(f"Failed to log info: {e}")
 
 def log_error(message):
-    current_time = time.localtime()
-    timestamp = f"{current_time.tm_year}-{current_time.tm_mon:02}-{current_time.tm_mday:02} {current_time.tm_hour:02}:{current_time.tm_min:02}:{current_time.tm_sec:02}"
+    timestamp = get_rtc_time()
     try:
         with open(LOG_FILE, 'a') as log_file:
             log_file.write(f"{timestamp} ERROR: {message}\n")
@@ -45,10 +51,11 @@ def log_error(message):
     except Exception as e:
         print(f"Failed to log error: {e}")
 
-# I2C initialization for SCD30 and BMP280
+# I2C initialization for SCD30, BMP280, and DS3231 RTC
 i2c = busio.I2C(board.GP21, board.GP20)
 scd30 = adafruit_scd30.SCD30(i2c)
 bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
+rtc = adafruit_ds3231.DS3231(i2c)  # Initialize DS3231 RTC
 
 # Disable auto-calibration for SCD30
 scd30.self_calibration_enabled = False
@@ -89,9 +96,9 @@ def send_sensor_data():
             humidity = scd30.relative_humidity
             pressure = bmp280.pressure
             altitude = bmp280.altitude
-            timestamp = f"{time.localtime().tm_year}-{time.localtime().tm_mon:02}-{time.localtime().tm_mday:02} {time.localtime().tm_hour:02}:{time.localtime().tm_min:02}:{time.localtime().tm_sec:02}"
+            timestamp = get_rtc_time()
             sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m"
-            sys.stdout.write(sensor_data + "\n")
+            print(sensor_data)
             log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude)
         except Exception as e:
             log_error(f"Failed to send sensor data: {e}")
@@ -102,44 +109,60 @@ def shutdown_pico():
     wake_alarm = alarm.pin.PinAlarm(pin=board.GP15, value=False, pull=True)
     alarm.exit_and_deep_sleep_until_alarms(wake_alarm)
 
+def sync_rtc_time(sync_time_str):
+    """Sync the RTC time using the SYNC_TIME command in format: SYNC_TIME,YYYY-MM-DD HH:MM:SS"""
+    try:
+        year, month, day, hour, minute, second = map(int, sync_time_str.split(",")[1].strip().split(" ")[0].split("-") + sync_time_str.split(" ")[1].split(":"))
+        rtc.datetime = time.struct_time((year, month, day, hour, minute, second, 0, -1, -1))
+        log_info(f"RTC time synchronized to: {sync_time_str}")
+    except Exception as e:
+        log_error(f"Failed to sync RTC time: {e}")
+
 def handle_commands(command):
     try:
         if command.startswith("FEED"):
             feed_amount = command.split(",")[1]
             log_info(f"Feed command received: {feed_amount} grams")
-            timestamp = f"{time.localtime().tm_year}-{time.localtime().tm_mon:02}-{time.localtime().tm_mday:02} {time.localtime().tm_hour:02}:{time.localtime().tm_min:02}:{time.localtime().tm_sec:02}"
+            timestamp = get_rtc_time()
             log_data_to_csv(timestamp, scd30.CO2, scd30.temperature, scd30.relative_humidity, feed_amount=feed_amount)
         
         elif command.startswith("CALIBRATE"):
             recalibration_value = int(command.split(",")[1])
             scd30.set_forced_recalibration(recalibration_value)
             log_info(f"Recalibration command received: {recalibration_value} ppm")
-        
+
+        elif command == "REQUEST_DATA":
+            send_sensor_data()
+
         elif command == "SHUTDOWN":
             shutdown_pico()
 
+        elif command.startswith("SYNC_TIME"):
+            sync_rtc_time(command)
+
         elif command == "REQUEST_RTC_TIME":
-            timestamp = f"{time.localtime().tm_year}-{time.localtime().tm_mon:02}-{time.localtime().tm_mday:02} {time.localtime().tm_hour:02}:{time.localtime().tm_min:02}:{time.localtime().tm_sec:02}"
-            sys.stdout.write(f"RTC_TIME,{timestamp}\n")
+            timestamp = get_rtc_time()
+            print(f"RTC_TIME,{timestamp}")
 
     except Exception as e:
         log_error(f"Failed to handle command: {e}")
 
 # Main control loop
 def control_loop():
-    time.sleep(15)  # Allow time for sensor initialization
-    
-    # Send initial sensor data
+    log_info("Starting system... warming up sensors for 15 seconds.")
+    time.sleep(15)  # Warm-up period for sensors
+
+    # Initial sensor data send before entering the main loop
+    log_info("Sending initial sensor data after warm-up period.")
     try:
         update_scd30_compensation()
         time.sleep(15)  # Wait for sensor stabilization
         send_sensor_data()
-        last_reading_time = current_time
     except Exception as e:
-        log_error(f"Error in sensor reading cycle: {e}")
+        log_error(f"Error during initial sensor data send: {e}")
 
     last_reading_time = time.monotonic()
-    
+
     while True:
         current_time = time.monotonic()
 
