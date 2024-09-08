@@ -3,21 +3,21 @@ import busio
 import sdcardio
 import storage
 import digitalio
+import os
 
-# Initialize SPI bus and chip select pin
+# SPI configuration for Raspberry Pi Pico
 spi = busio.SPI(board.GP10, board.GP11, board.GP12)
-cs = board.GP13
+cs = digitalio.DigitalInOut(board.GP13)
 
-# Wait for the SPI lock and configure
-while not spi.try_lock():
-    pass
-spi.configure(baudrate=1000000)  # Set the clock speed to 1 MHz
-spi.unlock()
-
-# Try mounting the SD card
+# Attempt to initialize and mount the SD card
 try:
     sdcard = sdcardio.SDCard(spi, cs)
     vfs = storage.VfsFat(sdcard)
+    
+    # Check if the mount point directory exists, if not, create it
+    if '/sd' not in os.listdir('/'):
+        os.mkdir('/sd')  # Create the mount point
+
     storage.mount(vfs, "/sd")
     print("SD card mounted successfully!")
 except OSError as e:
