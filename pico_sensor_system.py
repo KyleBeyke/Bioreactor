@@ -81,10 +81,8 @@ def log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitu
 def update_scd30_compensation():
     try:
         pressure = bmp280.pressure
-        altitude = bmp280.altitude
-        scd30.set_altitude_comp(int(altitude))
-        scd30.start_continous_measurement(int(pressure))
-        log_info(f"Compensation updated: Pressure: {pressure}, Altitude: {altitude}")
+        scd30.start_continous_measurement(int(pressure))  # Start measurements using pressure for compensation
+        log_info(f"Compensation updated: Pressure: {pressure}")
     except Exception as e:
         log_error(f"Failed to update compensation: {e}")
 
