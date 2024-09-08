@@ -6,7 +6,7 @@ import digitalio
 
 # Initialize SPI bus and chip select pin
 spi = busio.SPI(board.GP10, board.GP11, board.GP12)
-cs = digitalio.DigitalInOut(board.GP13)
+cs = board.GP13
 
 # Wait for the SPI lock and configure
 while not spi.try_lock():
