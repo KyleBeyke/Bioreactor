@@ -59,6 +59,7 @@ rtc = adafruit_ds3231.DS3231(i2c)  # Initialize DS3231 RTC
 
 # Disable auto-calibration for SCD30
 scd30.self_calibration_enabled = False
+scd30.measurement_interval = 15  # Set measurement interval to 15 seconds
 
 # Setup SPI for SD card
 spi = busio.SPI(clock=board.GP10, MOSI=board.GP11, MISO=board.GP12)
@@ -80,9 +81,10 @@ def log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitu
 
 def update_scd30_compensation():
     try:
-        pressure = bmp280.pressure
-        scd30.start_continous_measurement(int(pressure))  # Start measurements using pressure for compensation
-        log_info(f"Compensation updated: Pressure: {pressure}")
+        scd30.ambient_pressure = bmp280.pressure
+        scd30.altitude = bmp280.altitude 
+        scd30.reset()
+        log_info(f"Compensation updated: Pressure: {scd30.ambient_pressure}, Altitude: {bmp280.altitude }")
     except Exception as e:
         log_error(f"Failed to update compensation: {e}")
 
@@ -126,7 +128,7 @@ def handle_commands(command):
         
         elif command.startswith("CALIBRATE"):
             recalibration_value = int(command.split(",")[1])
-            scd30.set_forced_recalibration(recalibration_value)
+            scd30.forced_recalibration_reference = recalibration_value
             log_info(f"Recalibration command received: {recalibration_value} ppm")
 
         elif command == "REQUEST_DATA":
