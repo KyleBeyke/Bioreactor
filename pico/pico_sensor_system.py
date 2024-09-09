@@ -23,6 +23,7 @@ import storage
 import adafruit_sdcard
 import microcontroller
 import alarm
+import supervisor  # Used for checking serial input
 
 # Simple logging functions to mimic logging behavior
 LOG_FILE = "/sd/pico_log.txt"
@@ -90,8 +91,14 @@ def update_scd30_compensation():
         log_error(f"Failed to update compensation: {e}")
 
 def send_sensor_data(feed=None, recalibration=None):
-    while not scd30.data_available:
+    retries = 3  # Retry mechanism if data is not available
+    while not scd30.data_available and retries > 0:
+        retries -= 1
         time.sleep(5)
+
+    if retries == 0:
+        log_error("Failed to get sensor data after multiple retries")
+        return
 
     try:
         co2 = scd30.CO2
@@ -115,7 +122,11 @@ def shutdown_pico():
 def sync_rtc_time(sync_time_str):
     """Sync the RTC time using the SYNC_TIME command in format: SYNC_TIME,YYYY-MM-DD HH:MM:SS"""
     try:
-        year, month, day, hour, minute, second = map(int, sync_time_str.split(",")[1].strip().split(" ")[0].split("-") + sync_time_str.split(" ")[1].split(":"))
+        parts = sync_time_str.split(",")[1].strip().split(" ")
+        date_parts = parts[0].split("-")
+        time_parts = parts[1].split(":")
+        year, month, day = map(int, date_parts)
+        hour, minute, second = map(int, time_parts)
         rtc.datetime = time.struct_time((year, month, day, hour, minute, second, 0, -1, -1))
         log_info(f"RTC time synchronized to: {sync_time_str}")
     except Exception as e:
@@ -179,7 +190,7 @@ def control_loop():
 
         # Listen for commands from the Pi
         try:
-            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+            if supervisor.runtime.serial_bytes_available:
                 command = input().strip()
                 handle_commands(command)
 
