@@ -120,6 +120,10 @@ except Exception as e:
 
 def set_co2_interval(interval):
     """Sets the CO2 measurement interval for the SCD30 sensor."""
+    if int(interval) < 2:
+        log_error("Interval value must be greater than 1 second.")
+        return
+    
     try:
         scd30.measurement_interval = int(interval)
         log_info(f"SCD30 CO2 measurement interval set to: {interval} second(s)")
