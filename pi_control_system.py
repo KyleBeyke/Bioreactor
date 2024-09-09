@@ -123,16 +123,17 @@ def wake_pico():
 def show_help_menu():
     """Displays the available command options."""
     help_menu = """
-    /help : Show this help menu
+    /h : Show this help menu
     /f : Feed - Enter the feed amount in grams
     /c : Calibrate - Enter the CO2 value for recalibration
-    /s : Shutdown the system
-    /r : Restart the Pico from deep sleep
     /t : Set CO2 threshold value
-    /altitude : Set altitude for SCD30 sensor
-    /pressure : Set pressure reference for BMP280 sensor
-    /interval : Set CO2 measurement interval for SCD30 sensor
-    /cycle : Set sensor data query cycle duration in minutes
+    /a : Set altitude for SCD30 sensor
+    /p : Set sea level pressure reference for BMP280 sensor
+    /i : Set CO2 measurement interval for SCD30 sensor
+    /c : Set sensor data query cycle duration in minutes
+    /s : Shutdown the system into deep sleep
+    /w : Wake the Pico from deep sleep
+    /r : Reset the Pico
     /e : Exit the control loop
     """
     print(help_menu)
@@ -157,9 +158,9 @@ def control_loop():
                     logging.info(f"Received data: {sensor_data}")
 
             # Get user input for commands
-            command = input("Enter command (use '/help' for a list of commands): ").lower()
+            command = input("Enter command ('/h' for commands): ").lower()
 
-            if command == '/help':
+            if command == '/h':
                 show_help_menu()
 
             elif command == '/f':
@@ -182,41 +183,47 @@ def control_loop():
                 log_command(shutdown_command)
                 logging.info("Shutdown command sent to Pico")
 
-            elif command == '/r':
+            elif command == '/w':
                 wake_pico()
-                logging.info("Restart command executed (woke Pico)")
+                logging.info("Wake command executed (woke Pico)")
 
             elif command == '/t':
                 new_threshold = input("Enter new CO2 threshold: ")
                 logging.info(f"New CO2 threshold set: {new_threshold}")
 
-            elif command == '/altitude':
+            elif command == '/a':
                 altitude = input("Enter new altitude for SCD30 sensor (meters): ")
                 altitude_command = f"SET_ALTITUDE,{altitude}\n"
                 ser.write(altitude_command.encode())
                 log_command(altitude_command)
                 logging.info(f"Altitude set to: {altitude} meters")
 
-            elif command == '/pressure':
+            elif command == '/p':
                 pressure = input("Enter new pressure reference for BMP280 sensor (hPa): ")
                 pressure_command = f"SET_PRESSURE,{pressure}\n"
                 ser.write(pressure_command.encode())
                 log_command(pressure_command)
                 logging.info(f"Pressure reference set to: {pressure} hPa")
 
-            elif command == '/interval':
+            elif command == '/i':
                 interval = input("Enter CO2 measurement interval for SCD30 sensor (seconds): ")
                 interval_command = f"SET_CO2_INTERVAL,{interval}\n"
                 ser.write(interval_command.encode())
                 log_command(interval_command)
                 logging.info(f"CO2 measurement interval set to: {interval} seconds")
 
-            elif command == '/cycle':
+            elif command == '/c':
                 new_cycle = input("Enter new sensor data query cycle duration (minutes): ")
                 cycle_command = f"SET_CYCLE_MINS,{new_cycle}\n"
                 ser.write(cycle_command.encode())
                 log_command(cycle_command)
                 logging.info(f"Sensor data query cycle set to: {new_cycle} minutes")
+
+            elif command == '/r':
+                reset_command = "RESET_PICO\n"
+                ser.write(reset_command.encode())
+                log_command(reset_command)
+                logging.info("Reset command sent to Pico")
 
             elif command == '/e':
                 logging.info("Exiting control loop")
