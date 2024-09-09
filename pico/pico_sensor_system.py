@@ -21,12 +21,21 @@ import adafruit_ds3231
 import digitalio
 import storage
 import adafruit_sdcard
-import microcontroller
 import alarm
 import supervisor  # Used for checking serial input
+import microcontroller  # Used for safe reset
+
+# Global default sensor data query cycle
+sensor_query_cycle_mins = 5  # Time interval for querying sensor data (in minutes)
+cycle = sensor_query_cycle_mins * 60  # Convert minutes to seconds
 
 # Simple logging functions to mimic logging behavior
 LOG_FILE = "/sd/pico_log.txt"
+
+def set_cycle(new_cycle):
+    global cycle
+    cycle = new_cycle * 60
+    log_info(f"Sensor query cycle set to: {cycle} seconds")
 
 # Get current time from the RTC
 def get_rtc_time():
@@ -51,34 +60,58 @@ def log_error(message):
     except Exception as e:
         print(f"Failed to log error: {e}")
 
+# Function to reset the Pico        
+def reset_pico():
+    log_info("Resetting the Pico in 30 seconds...")
+    time.sleep(30)  # Optional: allow time for operations to complete before reset
+    log_info("Resetting the Pico now.")
+    microcontroller.reset()
+
 # I2C initialization for SCD30, BMP280, and DS3231 RTC
-i2c = busio.I2C(board.GP21, board.GP20)
-scd30 = adafruit_scd30.SCD30(i2c)
-bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
-rtc = adafruit_ds3231.DS3231(i2c)  # Initialize DS3231 RTC
+try:
+    i2c = busio.I2C(board.GP21, board.GP20)
+    scd30 = adafruit_scd30.SCD30(i2c)
+    bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
+    rtc = adafruit_ds3231.DS3231(i2c)  # Initialize DS3231 RTC
+    log_info("I2C devices initialized successfully.")
+except Exception as e:
+    log_error(f"Failed to initialize I2C devices: {e}")
+    reset_pico()
 
 # Disable auto-calibration for SCD30
-scd30.self_calibration_enabled = False
-scd30.measurement_interval = 5  # Set measurement interval to 5 seconds
+try:
+    scd30.self_calibration_enabled = False
+    scd30.measurement_interval = 5  # Set measurement interval to 5 seconds
+    log_info("SCD30 auto-calibration disabled.")
+except Exception as e:
+    log_error(f"Failed to disable SCD30 auto-calibration: {e}")
+    reset_pico()
 
 # Setup SPI for SD card
-spi = busio.SPI(clock=board.GP10, MOSI=board.GP11, MISO=board.GP12)
-cs = digitalio.DigitalInOut(board.GP13)  # Chip select pin
-sdcard = adafruit_sdcard.SDCard(spi, cs)
-vfs = storage.VfsFat(sdcard)
-storage.mount(vfs, "/sd")
+try:
+    spi = busio.SPI(clock=board.GP10, MOSI=board.GP11, MISO=board.GP12)
+    cs = digitalio.DigitalInOut(board.GP13)  # Chip select pin
+    sdcard = adafruit_sdcard.SDCard(spi, cs)
+    vfs = storage.VfsFat(sdcard)
+    storage.mount(vfs, "/sd")
+    log_info("SD card mounted successfully.")
+except Exception as e:
+    log_error(f"Failed to mount SD card: {e}")
+    reset_pico()
 
 # CSV file for logging sensor data
 DATA_LOG_FILE = "/sd/sensor_data.csv"
 
+# CSV logging function
 def log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude, feed_amount=None, recalibration=None):
     try:
         with open(DATA_LOG_FILE, mode='a') as csvfile:
             csvfile.write(f"{timestamp},{co2},{temperature},{humidity},{pressure},{altitude},{feed_amount},{recalibration}\n")
-        log_info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Altitude: {altitude} m")
+        log_info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Altitude: {altitude} m, Feed Amount: {feed_amount}, Recalibration: {recalibration}")
     except Exception as e:
         log_error(f"Failed to log data to CSV: {e}")
 
+# Function to update SCD30 altitude and pressure compensation
 def update_scd30_compensation():
     try:
         pressure = bmp280.pressure
@@ -90,6 +123,7 @@ def update_scd30_compensation():
     except Exception as e:
         log_error(f"Failed to update compensation: {e}")
 
+# Function to send sensor data and log to SD card
 def send_sensor_data(feed=None, recalibration=None):
     retries = 3  # Retry mechanism if data is not available
     while not scd30.data_available and retries > 0:
@@ -113,12 +147,14 @@ def send_sensor_data(feed=None, recalibration=None):
     except Exception as e:
         log_error(f"Failed to send sensor data: {e}")
 
+# Function to shutdown Pico and enter deep sleep
 def shutdown_pico():
     log_info("Shutting down Pico and entering deep sleep.")
     time.sleep(2)  # Ensure all operations complete
     wake_alarm = alarm.pin.PinAlarm(pin=board.GP15, value=False, pull=True)
     alarm.exit_and_deep_sleep_until_alarms(wake_alarm)
 
+# Function to sync RTC time with the Pi
 def sync_rtc_time(sync_time_str):
     """Sync the RTC time using the SYNC_TIME command in format: SYNC_TIME,YYYY-MM-DD HH:MM:SS"""
     try:
@@ -132,6 +168,7 @@ def sync_rtc_time(sync_time_str):
     except Exception as e:
         log_error(f"Failed to sync RTC time: {e}")
 
+# Function to handle incoming commands
 def handle_commands(command):
     try:
         if command.startswith("FEED"):
@@ -156,15 +193,28 @@ def handle_commands(command):
 
         elif command == "REQUEST_RTC_TIME":
             timestamp = get_rtc_time()
-            print(f"RTC_TIME,{timestamp}")
+            print(f"RTC time: {timestamp}")
+            
+        elif command == "SET_CYCLE_MINS":
+            global cycle
+            new_cycle = int(command.split(",")[1])
+            set_cycle(new_cycle)
+
+        elif command == "RESET_PICO":
+            reset_pico()
+
+        else:
+            log_error("Invalid command received")
 
     except Exception as e:
-        log_error(f"Failed to handle command: {e}")
+        log_error(f"Failed to handle command: {e}")        
 
 # Main control loop
 def control_loop():
     log_info("Starting system... warming up sensors for 15 seconds.")
     time.sleep(15)  # Warm-up period for sensors
+
+    global cycle
 
     # Initial sensor data send before entering the main loop
     log_info("Sending initial sensor data after warm-up period.")
@@ -179,8 +229,8 @@ def control_loop():
     while True:
         current_time = time.monotonic()
 
-        # Send sensor data every 15 minutes
-        if current_time - last_reading_time >= 900:
+        # Send sensor data every cycle duration (default 5 minutes)
+        if current_time - last_reading_time >= cycle:
             try:
                 update_scd30_compensation()
                 send_sensor_data()
