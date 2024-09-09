@@ -217,7 +217,7 @@ def send_sensor_data(feed=None, recalibration=None):
         humidity = scd30.relative_humidity
         pressure = bmp280.pressure
         timestamp = get_rtc_time()
-        sensor_data = f"{timestamp},{co2:.2f},{temperature:.2f},{humidity:.2f},{pressure:.2f}"
+        sensor_data = f"SENSOR DATA:{timestamp},{co2:.2f},{temperature:.2f},{humidity:.2f},{pressure:.2f}"
         print(sensor_data)
         log_data_to_csv(timestamp, co2, temperature, humidity, pressure, feed, recalibration)
     except Exception as e:

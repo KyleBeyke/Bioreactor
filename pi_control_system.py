@@ -144,6 +144,7 @@ def control_loop():
     try:
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT)
         rtc_time = request_rtc_time(ser)  # Get RTC time on startup
+        logging.info(f"RTC time received: {rtc_time}")
     except serial.SerialException as e:
         logging.error(f"Failed to open serial port: {e}")
         return
@@ -151,11 +152,11 @@ def control_loop():
     try:
         while True:
             if ser.in_waiting > 0:
-                sensor_data = ser.readline().decode('utf-8').strip()
-                if "CO2" in sensor_data:
-                    logging.info(f"CO2 data received: {sensor_data}")
+                serial_data = ser.readline().decode('utf-8').strip()
+                if "SENSOR DATA" in serial_data:
+                    logging.info(f"Sensor data received: {serial_data}")
                 else:
-                    logging.info(f"Received data: {sensor_data}")
+                    logging.info(f"Received data: {serial_data}")
 
             # Get user input for commands
             command = input("Enter command ('/h' for commands): ").lower()
