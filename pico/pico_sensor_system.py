@@ -118,11 +118,19 @@ except Exception as e:
     log_traceback_error(e)
     reset_pico()
 
+def set_co2_interval(interval):
+    """Sets the CO2 measurement interval for the SCD30 sensor."""
+    try:
+        scd30.measurement_interval = int(interval)
+        log_info(f"SCD30 CO2 measurement interval set to: {interval} second(s)")
+    except Exception as e:
+        log_traceback_error(e)
+
 def set_cycle(new_cycle):
     """Sets the new sensor query cycle duration."""
     global cycle
     cycle = new_cycle * 60
-    log_info(f"Sensor query cycle set to: {cycle} seconds")
+    log_info(f"Sensor query cycle set to: {cycle} second(s)")
 
 # CSV logging function
 DATA_LOG_FILE = "/sd/sensor_data.csv"
@@ -227,8 +235,13 @@ def handle_commands(command):
         elif command.startswith("SET_CYCLE_MINS"):
             global cycle
             new_cycle = int(command.split(",")[1])
-            log_info(f"Set cycle command received: {new_cycle} minutes")
+            log_info(f"Set cycle command received: {new_cycle} minute(s)")
             set_cycle(new_cycle)
+            
+        elif command.startswith("SET_CO2_INTERVAL"):
+            interval = command.split(",")[1]
+            log_info(f"Set CO2 interval command received: {interval} second(s)")
+            set_co2_interval(interval)
 
         elif command == "RESET_PICO":
             reset_pico()
