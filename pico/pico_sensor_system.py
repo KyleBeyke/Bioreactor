@@ -54,6 +54,11 @@ for attempt in range(3):
         print(f"Failed to initialize I2C devices on attempt {attempt + 1}: {e}")
         if attempt == 2:
             reset_pico()
+            
+# Get current time from the RTC
+def get_rtc_time():
+    rtc_time = rtc.datetime
+    return f"{rtc_time.tm_year}-{rtc_time.tm_mon:02}-{rtc_time.tm_mday:02} {rtc_time.tm_hour:02}:{rtc_time.tm_min:02}:{rtc_time.tm_sec:02}"
 
 # Logging file path on SD card
 LOG_FILE = "/sd/pico_log.txt"
@@ -100,14 +105,9 @@ for attempt in range(3):
         log_info("SD card mounted successfully.")
         break
     except Exception as e:
-        log_error(f"Failed to mount SD card on attempt {attempt + 1}: {e}")
+        print(f"Failed to mount SD card on attempt {attempt + 1}: {e}")
         if attempt == 2:
             reset_pico()
-            
-# Get current time from the RTC
-def get_rtc_time():
-    rtc_time = rtc.datetime
-    return f"{rtc_time.tm_year}-{rtc_time.tm_mon:02}-{rtc_time.tm_mday:02} {rtc_time.tm_hour:02}:{rtc_time.tm_min:02}:{rtc_time.tm_sec:02}"
 
 # Disable auto-calibration for SCD30
 try:
