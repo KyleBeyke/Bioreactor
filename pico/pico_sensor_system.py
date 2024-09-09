@@ -32,11 +32,6 @@ cycle = sensor_query_cycle_mins * 60  # Convert minutes to seconds
 # Simple logging functions to mimic logging behavior
 LOG_FILE = "/sd/pico_log.txt"
 
-def set_cycle(new_cycle):
-    global cycle
-    cycle = new_cycle * 60
-    log_info(f"Sensor query cycle set to: {cycle} seconds")
-
 # Get current time from the RTC
 def get_rtc_time():
     rtc_time = rtc.datetime
@@ -60,12 +55,29 @@ def log_error(message):
     except Exception as e:
         print(f"Failed to log error: {e}")
 
-# Function to reset the Pico        
+        # Function to reset the Pico        
 def reset_pico():
-    log_info("Resetting the Pico in 30 seconds...")
+    print("Resetting the Pico in 30 seconds...")
     time.sleep(30)  # Optional: allow time for operations to complete before reset
-    log_info("Resetting the Pico now.")
+    try:
+        log_info("Resetting the Pico now.")
+    except Exception as e:
+        print(f"Failed to log the Pico reset: {e}")
+        print("Resetting the Pico now.")
     microcontroller.reset()
+
+# Setup SPI for SD card
+try:
+    spi = busio.SPI(clock=board.GP10, MOSI=board.GP11, MISO=board.GP12)
+    cs = digitalio.DigitalInOut(board.GP13)  # Chip select pin
+    sdcard = adafruit_sdcard.SDCard(spi, cs)
+    time.sleep(2)  # Allow time for SD card to initialize
+    vfs = storage.VfsFat(sdcard)
+    storage.mount(vfs, "/sd")
+    log_info("SD card mounted successfully.")
+except Exception as e:
+    print(f"Failed to mount SD card: {e}")
+    reset_pico()
 
 # I2C initialization for SCD30, BMP280, and DS3231 RTC
 try:
@@ -87,17 +99,11 @@ except Exception as e:
     log_error(f"Failed to disable SCD30 auto-calibration: {e}")
     reset_pico()
 
-# Setup SPI for SD card
-try:
-    spi = busio.SPI(clock=board.GP10, MOSI=board.GP11, MISO=board.GP12)
-    cs = digitalio.DigitalInOut(board.GP13)  # Chip select pin
-    sdcard = adafruit_sdcard.SDCard(spi, cs)
-    vfs = storage.VfsFat(sdcard)
-    storage.mount(vfs, "/sd")
-    log_info("SD card mounted successfully.")
-except Exception as e:
-    log_error(f"Failed to mount SD card: {e}")
-    reset_pico()
+def set_cycle(new_cycle):
+    global cycle
+    cycle = new_cycle * 60
+    log_info(f"Sensor query cycle set to: {cycle} seconds")
+
 
 # CSV file for logging sensor data
 DATA_LOG_FILE = "/sd/sensor_data.csv"
