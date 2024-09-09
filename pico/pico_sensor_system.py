@@ -30,6 +30,31 @@ import traceback  # For logging traceback details
 sensor_query_cycle_mins = 5  # Time interval for querying sensor data (in minutes)
 cycle = sensor_query_cycle_mins * 60  # Convert minutes to seconds
 
+# Function to reset the Pico
+def reset_pico():
+    """Resets the Pico after a 30-second wait to allow safe shutdown of tasks."""
+    print("Resetting the Pico in 30 seconds...")
+    time.sleep(30)
+    try:
+        log_info("Resetting the Pico now.")
+    except Exception as e:
+        print(f"Failed to log the Pico reset: {e}")
+    microcontroller.reset()
+
+# I2C initialization with retries
+for attempt in range(3):
+    try:
+        i2c = busio.I2C(board.GP21, board.GP20)
+        scd30 = adafruit_scd30.SCD30(i2c)
+        bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
+        rtc = adafruit_ds3231.DS3231(i2c)
+        print("I2C devices initialized successfully.")
+        break
+    except Exception as e:
+        print(f"Failed to initialize I2C devices on attempt {attempt + 1}: {e}")
+        if attempt == 2:
+            reset_pico()
+
 # Logging file path on SD card
 LOG_FILE = "/sd/pico_log.txt"
 
@@ -64,17 +89,6 @@ def log_traceback_error(e):
     except Exception as log_e:
         print(f"Failed to log traceback error: {log_e}")
 
-# Function to reset the Pico
-def reset_pico():
-    """Resets the Pico after a 30-second wait to allow safe shutdown of tasks."""
-    print("Resetting the Pico in 30 seconds...")
-    time.sleep(30)
-    try:
-        log_info("Resetting the Pico now.")
-    except Exception as e:
-        print(f"Failed to log the Pico reset: {e}")
-    microcontroller.reset()
-
 # Setup SPI for SD card with retries
 for attempt in range(3):
     try:
@@ -87,20 +101,6 @@ for attempt in range(3):
         break
     except Exception as e:
         log_error(f"Failed to mount SD card on attempt {attempt + 1}: {e}")
-        if attempt == 2:
-            reset_pico()
-
-# I2C initialization with retries
-for attempt in range(3):
-    try:
-        i2c = busio.I2C(board.GP21, board.GP20)
-        scd30 = adafruit_scd30.SCD30(i2c)
-        bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
-        rtc = adafruit_ds3231.DS3231(i2c)
-        log_info("I2C devices initialized successfully.")
-        break
-    except Exception as e:
-        log_traceback_error(e)
         if attempt == 2:
             reset_pico()
             
