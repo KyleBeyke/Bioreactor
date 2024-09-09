@@ -58,8 +58,8 @@ bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 rtc = adafruit_ds3231.DS3231(i2c)  # Initialize DS3231 RTC
 
 # Disable auto-calibration for SCD30
-scd30.self_calibration_enabled = False
-scd30.measurement_interval = 15  # Set measurement interval to 15 seconds
+scd30.self_calibration_enabled(false)
+scd30.measurement_interval(5)  # Set measurement interval to 5 seconds
 
 # Setup SPI for SD card
 spi = busio.SPI(clock=board.GP10, MOSI=board.GP11, MISO=board.GP12)
@@ -71,7 +71,7 @@ storage.mount(vfs, "/sd")
 # CSV file for logging sensor data
 DATA_LOG_FILE = "/sd/sensor_data.csv"
 
-def log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitude=None, feed_amount=None, recalibration=None):
+def log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude, feed_amount=None, recalibration=None):
     try:
         with open(DATA_LOG_FILE, mode='a') as csvfile:
             csvfile.write(f"{timestamp},{co2},{temperature},{humidity},{pressure},{altitude},{feed_amount},{recalibration}\n")
@@ -81,27 +81,33 @@ def log_data_to_csv(timestamp, co2, temperature, humidity, pressure=None, altitu
 
 def update_scd30_compensation():
     try:
-        scd30.ambient_pressure = bmp280.pressure
-        scd30.altitude = bmp280.altitude 
-        scd30.reset()
-        log_info(f"Compensation updated: Pressure: {scd30.ambient_pressure}, Altitude: {bmp280.altitude }")
+        pressure = bmp280.pressure
+        altitude = bmp280.altitude
+        scd30.ambient_pressure(pressure)
+        scd30.altitude(altitude)
+        time.sleep(5)
+        log_info(f"Compensation updated: Pressure: {scd30.ambient_pressure}, Altitude: {scd30.altitude }")
     except Exception as e:
         log_error(f"Failed to update compensation: {e}")
 
-def send_sensor_data():
-    if scd30.data_available:
-        try:
-            co2 = scd30.CO2
-            temperature = scd30.temperature
-            humidity = scd30.relative_humidity
-            pressure = bmp280.pressure
-            altitude = bmp280.altitude
-            timestamp = get_rtc_time()
-            sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m"
-            print(sensor_data)
-            log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude)
-        except Exception as e:
-            log_error(f"Failed to send sensor data: {e}")
+def send_sensor_data(feed = None, recalibration = None):
+    scd30.reset()
+
+    while not scd30.data_available:
+        time.sleep(5)
+
+    try:
+        co2 = scd30.CO2
+        temperature = scd30.temperature
+        humidity = scd30.relative_humidity
+        pressure = bmp280.pressure
+        altitude = bmp280.altitude
+        timestamp = get_rtc_time()
+        sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m"
+        print(sensor_data)
+        log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude, feed, recalibration)
+    except Exception as e:
+        log_error(f"Failed to send sensor data: {e}")
 
 def shutdown_pico():
     log_info("Shutting down Pico and entering deep sleep.")
@@ -123,13 +129,13 @@ def handle_commands(command):
         if command.startswith("FEED"):
             feed_amount = command.split(",")[1]
             log_info(f"Feed command received: {feed_amount} grams")
-            timestamp = get_rtc_time()
-            log_data_to_csv(timestamp, scd30.CO2, scd30.temperature, scd30.relative_humidity, feed_amount=feed_amount)
+            send_sensor_data(feed_amount, None)
         
         elif command.startswith("CALIBRATE"):
             recalibration_value = int(command.split(",")[1])
-            scd30.forced_recalibration_reference = recalibration_value
+            scd30.forced_recalibration_reference(recalibration_value)
             log_info(f"Recalibration command received: {recalibration_value} ppm")
+            send_sensor_data(None, recalibration_value)
 
         elif command == "REQUEST_DATA":
             send_sensor_data()
