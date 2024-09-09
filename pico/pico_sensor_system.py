@@ -33,11 +33,6 @@ cycle = sensor_query_cycle_mins * 60  # Convert minutes to seconds
 # Logging file path on SD card
 LOG_FILE = "/sd/pico_log.txt"
 
-# Get current time from the RTC
-def get_rtc_time():
-    rtc_time = rtc.datetime
-    return f"{rtc_time.tm_year}-{rtc_time.tm_mon:02}-{rtc_time.tm_mday:02} {rtc_time.tm_hour:02}:{rtc_time.tm_min:02}:{rtc_time.tm_sec:02}"
-
 def log_info(message):
     """Logs informational messages to the SD card and prints to console."""
     timestamp = get_rtc_time()
@@ -108,6 +103,11 @@ for attempt in range(3):
         log_traceback_error(e)
         if attempt == 2:
             reset_pico()
+            
+# Get current time from the RTC
+def get_rtc_time():
+    rtc_time = rtc.datetime
+    return f"{rtc_time.tm_year}-{rtc_time.tm_mon:02}-{rtc_time.tm_mday:02} {rtc_time.tm_hour:02}:{rtc_time.tm_min:02}:{rtc_time.tm_sec:02}"
 
 # Disable auto-calibration for SCD30
 try:
