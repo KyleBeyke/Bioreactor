@@ -224,7 +224,7 @@ def handle_commands(command):
             timestamp = get_rtc_time()
             print(f"RTC time: {timestamp}")
             
-        elif command.startswith()"SET_CYCLE_MINS"):
+        elif command.startswith("SET_CYCLE_MINS"):
             global cycle
             new_cycle = int(command.split(",")[1])
             log_info(f"Set cycle command received: {new_cycle} minutes")
