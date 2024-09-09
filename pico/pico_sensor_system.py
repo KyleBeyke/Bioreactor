@@ -54,7 +54,7 @@ for attempt in range(3):
         print(f"Failed to initialize I2C devices on attempt {attempt + 1}: {e}")
         if attempt == 2:
             reset_pico()
-            
+
 # Get current time from the RTC
 def get_rtc_time():
     rtc_time = rtc.datetime
@@ -109,57 +109,95 @@ for attempt in range(3):
         if attempt == 2:
             reset_pico()
 
-# Disable auto-calibration for SCD30
+# Setup SCD30 values
 try:
-    scd30.self_calibration_enabled = False
+    scd30.self_calibration_enabled = False # Disable auto-calibration
     scd30.measurement_interval = 5  # Set measurement interval to 5 seconds
+    scd30.altitude = 139  # Set altitude for pressure compensation
     log_info("SCD30 auto-calibration disabled.")
 except Exception as e:
     log_traceback_error(e)
+    log_error("Failed to disable SCD30 auto-calibration.")
     reset_pico()
+
+def set_altitude(new_altitude):
+    """Sets the altitude for the SCD30 sensor."""
+    global scd30
+    try:
+        new_altitude = int(new_altitude)
+        scd30.altitude = new_altitude
+        log_info(f"SCD30 altitude set to: {new_altitude} meters")
+    except Exception as e:
+        log_traceback_error(e)
+        log_error("Failed to set SCD30 altitude.")
 
 def set_co2_interval(interval):
     """Sets the CO2 measurement interval for the SCD30 sensor."""
-    if int(interval) < 2:
-        log_error("Interval value must be greater than 1 second.")
-        return
-    
     try:
+        if int(interval) < 2:
+            log_error("Interval value must be greater than 1 second.")
+            return
         scd30.measurement_interval = int(interval)
         log_info(f"SCD30 CO2 measurement interval set to: {interval} second(s)")
     except Exception as e:
         log_traceback_error(e)
+        log_error("Failed to set SCD30 CO2 measurement interval.")
+
+# Set BMP280 location reference sea level pressure
+try:
+    bmp280.sea_level_pressure = 1023
+    log_info(f"BMP280 reference sea level pressure set: {bmp280.sea_level_pressure} hPa")
+except Exception as e:
+    log_traceback_error(e)
+    log_error("Failed to set BMP280 reference sea level pressure.")
+    reset_pico()
+
+def set_pressure_reference(pressure):
+    """Sets the BMP280 reference sea level pressure."""
+    try:
+        bmp280.sea_level_pressure = pressure
+        log_info(f"BMP280 reference sea level pressure set: {pressure} hPa")
+    except Exception as e:
+        log_traceback_error(e)
+        log_error("Failed to set BMP280 reference sea level pressure.")
 
 def set_cycle(new_cycle):
     """Sets the new sensor query cycle duration."""
     global cycle
-    cycle = new_cycle * 60
-    log_info(f"Sensor query cycle set to: {cycle} second(s)")
+    try:
+        if new_cycle < 1:
+            log_error("Cycle duration must be at least 1 minute.")
+            return
+        cycle = new_cycle * 60
+        log_info(f"Sensor query cycle set to: {cycle} second(s)")
+    except Exception as e:
+        log_traceback_error(e)
+        log_error("Failed to set sensor query cycle.")
 
 # CSV logging function
 DATA_LOG_FILE = "/sd/sensor_data.csv"
 
-def log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude, feed_amount=None, recalibration=None):
+def log_data_to_csv(timestamp, co2, temperature, humidity, pressure, feed_amount=None, recalibration=None):
     """Logs sensor data to the CSV file on the SD card."""
     try:
         with open(DATA_LOG_FILE, mode='a') as csvfile:
-            csvfile.write(f"{timestamp},{co2},{temperature},{humidity},{pressure},{altitude},{feed_amount},{recalibration}\n")
-        log_info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Altitude: {altitude} m, Feed Amount: {feed_amount}, Recalibration: {recalibration}")
+            csvfile.write(f"{timestamp},{co2},{temperature},{humidity},{pressure},{feed_amount},{recalibration}\n")
+        log_info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Feed Amount: {feed_amount}, Recalibration: {recalibration}")
     except Exception as e:
         log_traceback_error(e)
+        log_error("Failed to log sensor data to CSV.")
 
 # Function to update SCD30 altitude and pressure compensation
 def update_scd30_compensation():
     """Updates the SCD30 sensor compensation values based on BMP280 readings."""
     try:
         pressure = bmp280.pressure
-        altitude = bmp280.altitude
         scd30.ambient_pressure = int(pressure)
-        scd30.altitude = int(altitude)
         time.sleep(5)
-        log_info(f"Compensation updated: Pressure: {pressure}, Altitude: {altitude}")
+        log_info(f"Compensation updated: Pressure: {pressure} hPa")
     except Exception as e:
         log_traceback_error(e)
+        log_error("Failed to update SCD30 compensation values.")
 
 # Send sensor data and log to SD card with retries
 def send_sensor_data(feed=None, recalibration=None):
@@ -178,11 +216,10 @@ def send_sensor_data(feed=None, recalibration=None):
         temperature = scd30.temperature
         humidity = scd30.relative_humidity
         pressure = bmp280.pressure
-        altitude = bmp280.altitude
         timestamp = get_rtc_time()
-        sensor_data = f"{timestamp} | CO2: {co2:.2f} ppm, Temp: {temperature:.2f} °C, Humidity: {humidity:.2f} %, Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m"
+        sensor_data = f"{timestamp},{co2:.2f},{temperature:.2f},{humidity:.2f},{pressure:.2f}"
         print(sensor_data)
-        log_data_to_csv(timestamp, co2, temperature, humidity, pressure, altitude, feed, recalibration)
+        log_data_to_csv(timestamp, co2, temperature, humidity, pressure, feed, recalibration)
     except Exception as e:
         log_traceback_error(e)
 
@@ -216,38 +253,55 @@ def handle_commands(command):
             feed_amount = command.split(",")[1]
             log_info(f"Feed command received: {feed_amount} grams")
             send_sensor_data(feed_amount, None)
-        
+            log_info("Feed operation completed.")
+
         elif command.startswith("CALIBRATE"):
             recalibration_value = int(command.split(",")[1])
             scd30.forced_recalibration_reference = recalibration_value
             log_info(f"Recalibration command received: {recalibration_value} ppm")
             send_sensor_data(None, recalibration_value)
+            log_info("Recalibration completed.")
 
         elif command == "REQUEST_DATA":
+            log_info("Data request command received.")
             send_sensor_data()
 
         elif command == "SHUTDOWN":
+            log_info("Shutdown command received.")
             shutdown_pico()
 
         elif command.startswith("SYNC_TIME"):
+            log_info("Time sync command received.")
             sync_rtc_time(command)
 
         elif command == "REQUEST_RTC_TIME":
+            log_info("RTC time request command received.")
             timestamp = get_rtc_time()
             print(f"RTC time: {timestamp}")
-            
+
+        elif command.startswith("SET_ALTITUDE"):
+            altitude = command.split(",")[1]
+            log_info(f"Set altitude command received: {altitude} meters")
+            set_altitude(altitude)
+
+        elif command.startswith("SET_PRESSURE"):
+            pressure = int(command.split(",")[1])
+            log_info(f"Set pressure command received: {pressure} hPa")
+            set_pressure_reference(pressure)
+
         elif command.startswith("SET_CYCLE_MINS"):
             global cycle
             new_cycle = int(command.split(",")[1])
             log_info(f"Set cycle command received: {new_cycle} minute(s)")
             set_cycle(new_cycle)
-            
+
         elif command.startswith("SET_CO2_INTERVAL"):
             interval = command.split(",")[1]
             log_info(f"Set CO2 interval command received: {interval} second(s)")
             set_co2_interval(interval)
 
         elif command == "RESET_PICO":
+            log_info("Reset command received.")
             reset_pico()
 
         else:
