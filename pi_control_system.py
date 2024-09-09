@@ -1,15 +1,15 @@
 """
 pi_control_system.py
 
-This script controls the bioreactor's Raspberry Pi, which communicates with a Pico microcontroller. 
+This script controls the bioreactor's Raspberry Pi, which communicates with a Pico microcontroller.
 The script manages:
 - Sensor data acquisition (CO2, temperature, etc.)
-- Commands (feed, calibration, shutdown, restart)
+- Commands (feed, calibration, shutdown, reset, set altitude, set pressure, set CO2 interval, etc.)
 - Time synchronization with Pico's RTC.
 - Sending alerts via Telegram when CO2 levels cross a threshold.
 - Logging commands and data for debugging and analysis.
 
-Refined with modularity, error handling, logging, and environment variable support for secure operations.
+Refined with modularity, error handling, logging, and full command support for the Pico.
 """
 
 import serial
@@ -17,7 +17,7 @@ import time
 import csv
 import os
 import logging
-import RPi.GPIO as GPIO # type: ignore
+import RPi.GPIO as GPIO
 from cryptography.fernet import Fernet
 import requests
 
@@ -129,6 +129,10 @@ def show_help_menu():
     /s : Shutdown the system
     /r : Restart the Pico from deep sleep
     /t : Set CO2 threshold value
+    /altitude : Set altitude for SCD30 sensor
+    /pressure : Set pressure reference for BMP280 sensor
+    /interval : Set CO2 measurement interval for SCD30 sensor
+    /cycle : Set sensor data query cycle duration in minutes
     /e : Exit the control loop
     """
     print(help_menu)
@@ -154,7 +158,7 @@ def control_loop():
 
             # Get user input for commands
             command = input("Enter command (use '/help' for a list of commands): ").lower()
-            
+
             if command == '/help':
                 show_help_menu()
 
@@ -186,6 +190,34 @@ def control_loop():
                 new_threshold = input("Enter new CO2 threshold: ")
                 logging.info(f"New CO2 threshold set: {new_threshold}")
 
+            elif command == '/altitude':
+                altitude = input("Enter new altitude for SCD30 sensor (meters): ")
+                altitude_command = f"SET_ALTITUDE,{altitude}\n"
+                ser.write(altitude_command.encode())
+                log_command(altitude_command)
+                logging.info(f"Altitude set to: {altitude} meters")
+
+            elif command == '/pressure':
+                pressure = input("Enter new pressure reference for BMP280 sensor (hPa): ")
+                pressure_command = f"SET_PRESSURE,{pressure}\n"
+                ser.write(pressure_command.encode())
+                log_command(pressure_command)
+                logging.info(f"Pressure reference set to: {pressure} hPa")
+
+            elif command == '/interval':
+                interval = input("Enter CO2 measurement interval for SCD30 sensor (seconds): ")
+                interval_command = f"SET_CO2_INTERVAL,{interval}\n"
+                ser.write(interval_command.encode())
+                log_command(interval_command)
+                logging.info(f"CO2 measurement interval set to: {interval} seconds")
+
+            elif command == '/cycle':
+                new_cycle = input("Enter new sensor data query cycle duration (minutes): ")
+                cycle_command = f"SET_CYCLE_MINS,{new_cycle}\n"
+                ser.write(cycle_command.encode())
+                log_command(cycle_command)
+                logging.info(f"Sensor data query cycle set to: {new_cycle} minutes")
+
             elif command == '/e':
                 logging.info("Exiting control loop")
                 break
@@ -195,10 +227,10 @@ def control_loop():
 
     except KeyboardInterrupt:
         logging.warning("Program interrupted by user")
-    
+
     except Exception as e:
         logging.error(f"Unexpected error in control loop: {e}")
-    
+
     finally:
         ser.close()
         GPIO.cleanup()
