@@ -21,8 +21,7 @@ import adafruit_ds3231
 import digitalio
 import storage
 import adafruit_sdcard
-import sys
-import select
+import microcontroller
 import alarm
 
 # Simple logging functions to mimic logging behavior
@@ -58,8 +57,8 @@ bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 rtc = adafruit_ds3231.DS3231(i2c)  # Initialize DS3231 RTC
 
 # Disable auto-calibration for SCD30
-scd30.self_calibration_enabled(False)
-scd30.measurement_interval(5)  # Set measurement interval to 5 seconds
+scd30.self_calibration_enabled = False
+scd30.measurement_interval = 5  # Set measurement interval to 5 seconds
 
 # Setup SPI for SD card
 spi = busio.SPI(clock=board.GP10, MOSI=board.GP11, MISO=board.GP12)
@@ -83,16 +82,14 @@ def update_scd30_compensation():
     try:
         pressure = bmp280.pressure
         altitude = bmp280.altitude
-        scd30.ambient_pressure(pressure)
-        scd30.altitude(altitude)
+        scd30.ambient_pressure = int(pressure)  # Setting ambient pressure in pascals
+        scd30.altitude = int(altitude)  # Set altitude in meters
         time.sleep(5)
-        log_info(f"Compensation updated: Pressure: {scd30.ambient_pressure}, Altitude: {scd30.altitude }")
+        log_info(f"Compensation updated: Pressure: {pressure}, Altitude: {altitude}")
     except Exception as e:
         log_error(f"Failed to update compensation: {e}")
 
-def send_sensor_data(feed = None, recalibration = None):
-    scd30.reset()
-
+def send_sensor_data(feed=None, recalibration=None):
     while not scd30.data_available:
         time.sleep(5)
 
@@ -133,7 +130,7 @@ def handle_commands(command):
         
         elif command.startswith("CALIBRATE"):
             recalibration_value = int(command.split(",")[1])
-            scd30.forced_recalibration_reference(recalibration_value)
+            scd30.forced_recalibration_reference = recalibration_value
             log_info(f"Recalibration command received: {recalibration_value} ppm")
             send_sensor_data(None, recalibration_value)
 
@@ -162,7 +159,6 @@ def control_loop():
     log_info("Sending initial sensor data after warm-up period.")
     try:
         update_scd30_compensation()
-        time.sleep(15)  # Wait for sensor stabilization
         send_sensor_data()
     except Exception as e:
         log_error(f"Error during initial sensor data send: {e}")
@@ -176,7 +172,6 @@ def control_loop():
         if current_time - last_reading_time >= 900:
             try:
                 update_scd30_compensation()
-                time.sleep(15)  # Wait for sensor stabilization
                 send_sensor_data()
                 last_reading_time = current_time
             except Exception as e:
