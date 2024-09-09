@@ -58,7 +58,7 @@ bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 rtc = adafruit_ds3231.DS3231(i2c)  # Initialize DS3231 RTC
 
 # Disable auto-calibration for SCD30
-scd30.self_calibration_enabled(false)
+scd30.self_calibration_enabled(False)
 scd30.measurement_interval(5)  # Set measurement interval to 5 seconds
 
 # Setup SPI for SD card
