@@ -35,6 +35,11 @@ TIMEOUT = 1
 # CSV file for logging commands on the Pi
 COMMAND_LOG_FILE = "commands_log.csv"
 
+co2_threshold = 600  # Threshold for CO2 level
+below_threshold_count = 0  # Track consecutive readings below threshold
+above_threshold_flag = False  # Track consecutive readings above threshold
+calibration_value = 400  # Default calibration value for CO2 sensor
+
 # Initialize the serial connection
 try:
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT)
@@ -135,6 +140,7 @@ def show_help_menu():
     /st  : Set RTC time on the Pico
     /f   : Feed - Enter the feed amount in grams
     /cal : Calibrate - Enter the CO2 value for recalibration
+    /th  : Set CO2 warning threshold level
     /alt : Set altitude for SCD30 sensor
     /p   : Set sea level pressure reference for BMP280 sensor
     /int : Set CO2 measurement interval for SCD30 sensor
@@ -149,7 +155,13 @@ def show_help_menu():
 # Main control loop
 def control_loop():
     """Main loop to handle serial communication and user input."""
+    global co2_threshold  # Threshold for CO2 level
+    global below_threshold_count  # Track consecutive readings below threshold
+    global above_threshold_flag  # Track consecutive readings above threshold
+    global calibration_value  # Default calibration value for CO2 sensor
+
     prompt_displayed = False  # Track if the prompt has been displayed
+
     try:
         while True:
             # Check for incoming serial data from the Pico
@@ -158,7 +170,34 @@ def control_loop():
                     serial_data = ser.readline().decode('utf-8').strip()
                     print(f"Data received: {serial_data}")
                     logging.info(f"Received data: {serial_data}")
+
+                    # Assume the incoming serial data is in the format "SENSOR DATA:timestamp,CO2,temperature,humidity,pressure"
+                    # Parse the CO2 value
+                    if serial_data.startswith("SENSOR DATA:"):
+                        # Extract sensor data, assuming it's in the format: "SENSOR DATA:timestamp,CO2,temperature,humidity,pressure"
+                        data_parts = serial_data.split(":")[1].split(",")
+                        co2_value = float(data_parts[1])  # Extract the CO2 value
+
+                        # Check if the CO2 value is above the threshold
+                        if co2_value >= co2_threshold:
+                            above_threshold_flag = True  # Set flag to indicate above-threshold reading
+
+                        # Check if the CO2 value is below the threshold
+                        if co2_value < co2_threshold and above_threshold_flag is True:
+                            below_threshold_count += 1  # Increment count for below-threshold readings
+                        else:
+                            below_threshold_count = 0  # Reset count if above the threshold
+
+                        # If the CO2 value has been below the threshold for 3 consecutive readings, send a Telegram alert
+                        if below_threshold_count >= 3:
+                            message = f"WARNING: Bioreactor CO2 is below threshold: {co2_threshold} ppm"
+                            send_telegram_message(message)
+                            logging.info(f"Telegram alert sent: {message}")
+                            above_threshold_flag = False  # Reset the counter after the message is sent
+                            below_threshold_count = 0  # Reset the counter after the message is sent
+
                     prompt_displayed = False  # Clear prompt flag to redisplay after data is processed
+
             except (serial.SerialException, TimeoutError) as e:
                 logging.error(f"Error with serial communication: {e}")
                 print(f"Error: {e}")
@@ -207,11 +246,24 @@ def control_loop():
 
                     elif command == '/cal':
                         try:
-                            co2_value = int(input("Enter CO2 value for recalibration: "))
-                            send_command_to_pico(f"CALIBRATE,{co2_value}")
+                            new_co2_threshold = int(input("Enter CO2 value for recalibration: "))
+                            send_command_to_pico(f"CALIBRATE,{new_co2_threshold}")
+                            calibration_value = new_co2_threshold
                         except ValueError:
                             print("Invalid input. Please enter a valid CO2 value.")
                             logging.warning("Invalid input for CO2 recalibration.")
+
+                    elif command == '/th':
+                        try:
+                            co2_threshold = int(input("Enter new CO2 threshold level (ppm): "))
+                            if co2_threshold <= calibration_value:
+                                print(f"CO2 threshold must be higher than {calibration_value}.")
+                                continue
+                            print(f"CO2 threshold set to: {co2_threshold}")
+                            logging.info(f"CO2 threshold set to: {co2_threshold}")
+                        except ValueError:
+                            print(f"Invalid input: {calibration_value}. Please enter a valid CO2 threshold.")
+                            logging.warning(f"Invalid input: {calibration_value} for CO2 threshold.")
 
                     elif command == '/alt':
                         try:
