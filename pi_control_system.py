@@ -20,6 +20,8 @@ import logging
 import RPi.GPIO as GPIO
 from cryptography.fernet import Fernet
 import requests
+import sys
+import select
 
 # Initialize logging
 LOG_FILE = "bioreactor_log.log"
@@ -31,7 +33,7 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(WAKE_PIN, GPIO.OUT, initial=GPIO.LOW)
 
 # Serial setup
-SERIAL_PORT = '/dev/ttyACM0'  # Adjust this as necessary
+SERIAL_PORT = '/dev/ttyACM0'
 BAUD_RATE = 115200
 TIMEOUT = 1
 
@@ -75,11 +77,14 @@ def send_telegram_message(message):
         data = {'chat_id': CHAT_ID, 'text': message}
         response = requests.post(url, data=data)
         if response.status_code == 200:
-            logging.info("Message sent successfully!")
+            logging.info("Telegram message sent successfully!")
+            print("Telegram message sent successfully!")
         else:
             logging.error(f"Failed to send message. Status code: {response.status_code}")
+            print(f"Failed to send Telegram message. Status code: {response.status_code}")
     except requests.RequestException as e:
         logging.error(f"Telegram message failed: {e}")
+        print(f"Telegram message failed: {e}")
 
 # Logging helper for commands
 def log_command(command):
@@ -104,9 +109,11 @@ def request_rtc_time(ser):
                 if "RTC_TIME" in response:
                     rtc_time = response.split(",")[1]
                     logging.info(f"RTC time received: {rtc_time}")
+                    print(f"RTC time received: {rtc_time}")
                     return rtc_time
     except Exception as e:
         logging.error(f"Failed to request RTC time: {e}")
+        print(f"Failed to request RTC time: {e}")
 
 # Wake up the Pico from deep sleep
 def wake_pico():
@@ -116,25 +123,28 @@ def wake_pico():
         time.sleep(1)
         GPIO.output(WAKE_PIN, GPIO.LOW)
         logging.info("Pico woken up from deep sleep")
+        print("Pico woken up from deep sleep")
     except Exception as e:
         logging.error(f"Error waking up Pico: {e}")
+        print(f"Error waking up Pico: {e}")
 
 # Function to display the help menu
 def show_help_menu():
     """Displays the available command options."""
     help_menu = """
-    /h : Show this help menu
-    /f : Feed - Enter the feed amount in grams
-    /c : Calibrate - Enter the CO2 value for recalibration
-    /t : Set CO2 threshold value
-    /a : Set altitude for SCD30 sensor
-    /p : Set sea level pressure reference for BMP280 sensor
-    /i : Set CO2 measurement interval for SCD30 sensor
-    /c : Set sensor data query cycle duration in minutes
-    /s : Shutdown the system into deep sleep
-    /w : Wake the Pico from deep sleep
-    /r : Reset the Pico
-    /e : Exit the control loop
+    /h   : Show this help menu
+    /d   : Request sensor data
+    /f   : Feed - Enter the feed amount in grams
+    /cal : Calibrate - Enter the CO2 value for recalibration
+    /t   : Set CO2 threshold value
+    /alt : Set altitude for SCD30 sensor
+    /p   : Set sea level pressure reference for BMP280 sensor
+    /int : Set CO2 measurement interval for SCD30 sensor
+    /cyc : Set sensor data query cycle duration in minutes
+    /s   : Shutdown the system into deep sleep
+    /w   : Wake the Pico from deep sleep
+    /r   : Reset the Pico
+    /e   : Exit the control loop
     """
     print(help_menu)
 
@@ -143,105 +153,152 @@ def control_loop():
     """Main loop to handle Pico communication and commands."""
     try:
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT)
-        rtc_time = request_rtc_time(ser)  # Get RTC time on startup
-        logging.info(f"RTC time received: {rtc_time}")
+
     except serial.SerialException as e:
         logging.error(f"Failed to open serial port: {e}")
+        print(f"Failed to open serial port: {e}")
         return
 
     try:
         while True:
-            if ser.in_waiting > 0:
-                serial_data = ser.readline().decode('utf-8').strip()
-                if "SENSOR DATA" in serial_data:
-                    logging.info(f"Sensor data received: {serial_data}")
-                else:
+            # Handle incoming serial data from Pico
+            try:
+                if ser.in_waiting > 0:
+                    serial_data = ser.readline().decode('utf-8').strip()
+                    if serial_data == '':
+                        raise TimeoutError("No data received within the timeout period.")
+                    print(f"Data received: {serial_data}")
                     logging.info(f"Received data: {serial_data}")
+            except (serial.SerialException, TimeoutError) as e:
+                logging.error(f"Error with serial communication: {e}")
+                print(f"Error: {e}")
 
-            # Get user input for commands
-            command = input("Enter command ('/h' for commands): ").lower()
+            # Non-blocking user input check
+            rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if rlist:
+                command = sys.stdin.readline().strip().lower()
 
-            if command == '/h':
-                show_help_menu()
+                try:
+                    if command == '/h':
+                        show_help_menu()
 
-            elif command == '/f':
-                feed_amount = input("Enter feed amount (grams): ")
-                feed_command = f"FEED,{feed_amount}\n"
-                ser.write(feed_command.encode())
-                log_command(feed_command)
-                logging.info(f"Feed command sent: {feed_amount} grams")
+                    elif command == '/d':
+                        request_data_command = "REQUEST_DATA\n"
+                        ser.write(request_data_command.encode())
+                        log_command(request_data_command)
+                        logging.info("Data request command sent")
 
-            elif command == '/c':
-                co2_value = input("Enter CO2 value for recalibration: ")
-                recalibration_command = f"CALIBRATE,{co2_value}\n"
-                ser.write(recalibration_command.encode())
-                log_command(recalibration_command)
-                logging.info(f"Recalibration command sent for {co2_value} ppm")
+                    elif command == '/f':
+                        try:
+                            feed_amount = int(input("Enter feed amount (grams): "))
+                            if feed_amount <= 0:
+                                print("Feed amount must be a positive number.")
+                                continue
+                            feed_command = f"FEED,{feed_amount}\n"
+                            ser.write(feed_command.encode())
+                            log_command(feed_command)
+                            logging.info(f"Feed command sent: {feed_amount} grams")
+                        except ValueError:
+                            print("Invalid input. Please enter a valid number.")
+                            logging.warning("Invalid input for feed amount.")
 
-            elif command == '/s':
-                shutdown_command = "SHUTDOWN\n"
-                ser.write(shutdown_command.encode())
-                log_command(shutdown_command)
-                logging.info("Shutdown command sent to Pico")
+                    elif command == '/cal':
+                        try:
+                            co2_value = int(input("Enter CO2 value for recalibration: "))
+                            recalibration_command = f"CALIBRATE,{co2_value}\n"
+                            ser.write(recalibration_command.encode())
+                            log_command(recalibration_command)
+                            logging.info(f"Recalibration command sent for {co2_value} ppm")
+                        except ValueError:
+                            print("Invalid input. Please enter a valid CO2 value.")
+                            logging.warning("Invalid input for CO2 recalibration.")
 
-            elif command == '/w':
-                wake_pico()
-                logging.info("Wake command executed (woke Pico)")
+                    elif command == '/alt':
+                        try:
+                            altitude = int(input("Enter new altitude for SCD30 sensor (meters): "))
+                            if altitude < 0:
+                                print("Altitude cannot be negative.")
+                                continue
+                            altitude_command = f"SET_ALTITUDE,{altitude}\n"
+                            ser.write(altitude_command.encode())
+                            log_command(altitude_command)
+                            logging.info(f"Altitude set to: {altitude} meters")
+                        except ValueError:
+                            print("Invalid input. Please enter a valid altitude.")
+                            logging.warning("Invalid input for altitude.")
 
-            elif command == '/t':
-                new_threshold = input("Enter new CO2 threshold: ")
-                logging.info(f"New CO2 threshold set: {new_threshold}")
+                    elif command == '/p':
+                        try:
+                            pressure = int(input("Enter new pressure reference for BMP280 sensor (hPa): "))
+                            if pressure <= 0:
+                                print("Pressure must be a positive number.")
+                                continue
+                            pressure_command = f"SET_PRESSURE,{pressure}\n"
+                            ser.write(pressure_command.encode())
+                            log_command(pressure_command)
+                            logging.info(f"Pressure reference set to: {pressure} hPa")
+                        except ValueError:
+                            print("Invalid input. Please enter a valid pressure reference.")
+                            logging.warning("Invalid input for pressure reference.")
 
-            elif command == '/a':
-                altitude = input("Enter new altitude for SCD30 sensor (meters): ")
-                altitude_command = f"SET_ALTITUDE,{altitude}\n"
-                ser.write(altitude_command.encode())
-                log_command(altitude_command)
-                logging.info(f"Altitude set to: {altitude} meters")
+                    elif command == '/int':
+                        try:
+                            interval = int(input("Enter CO2 measurement interval for SCD30 sensor (seconds): "))
+                            if interval < 2:
+                                print("CO2 interval must be greater than 1 second.")
+                                continue
+                            interval_command = f"SET_CO2_INTERVAL,{interval}\n"
+                            ser.write(interval_command.encode())
+                            log_command(interval_command)
+                            logging.info(f"CO2 measurement interval set to: {interval} seconds")
+                        except ValueError:
+                            print("Invalid input. Please enter a valid CO2 measurement interval.")
+                            logging.warning("Invalid input for CO2 interval.")
 
-            elif command == '/p':
-                pressure = input("Enter new pressure reference for BMP280 sensor (hPa): ")
-                pressure_command = f"SET_PRESSURE,{pressure}\n"
-                ser.write(pressure_command.encode())
-                log_command(pressure_command)
-                logging.info(f"Pressure reference set to: {pressure} hPa")
+                    elif command == '/cyc':
+                        try:
+                            new_cycle = int(input("Enter new sensor data query cycle duration (minutes): "))
+                            if new_cycle < 1:
+                                print("Cycle duration must be at least 1 minute.")
+                                continue
+                            cycle_command = f"SET_CYCLE_MINS,{new_cycle}\n"
+                            ser.write(cycle_command.encode())
+                            log_command(cycle_command)
+                            logging.info(f"Sensor data query cycle set to: {new_cycle} minutes")
+                        except ValueError:
+                            print("Invalid input. Please enter a valid number.")
+                            logging.warning("Invalid input for cycle duration.")
 
-            elif command == '/i':
-                interval = input("Enter CO2 measurement interval for SCD30 sensor (seconds): ")
-                interval_command = f"SET_CO2_INTERVAL,{interval}\n"
-                ser.write(interval_command.encode())
-                log_command(interval_command)
-                logging.info(f"CO2 measurement interval set to: {interval} seconds")
+                    elif command == '/r':
+                        reset_command = "RESET_PICO\n"
+                        ser.write(reset_command.encode())
+                        log_command(reset_command)
+                        logging.info("Reset command sent to Pico")
 
-            elif command == '/c':
-                new_cycle = input("Enter new sensor data query cycle duration (minutes): ")
-                cycle_command = f"SET_CYCLE_MINS,{new_cycle}\n"
-                ser.write(cycle_command.encode())
-                log_command(cycle_command)
-                logging.info(f"Sensor data query cycle set to: {new_cycle} minutes")
+                    elif command == '/e':
+                        logging.info("Exiting control loop")
+                        break
 
-            elif command == '/r':
-                reset_command = "RESET_PICO\n"
-                ser.write(reset_command.encode())
-                log_command(reset_command)
-                logging.info("Reset command sent to Pico")
+                    else:
+                        logging.warning("Invalid command entered")
+                        print("Invalid command. Type '/h' for the list of available commands.")
 
-            elif command == '/e':
-                logging.info("Exiting control loop")
-                break
-
-            else:
-                logging.warning("Invalid command entered")
+                except Exception as e:
+                    logging.error(f"Error processing command: {e}")
+                    print(f"Error processing command: {e}")
 
     except KeyboardInterrupt:
         logging.warning("Program interrupted by user")
+        print("Program interrupted by user")
 
     except Exception as e:
         logging.error(f"Unexpected error in control loop: {e}")
+        print(f"Unexpected error in control loop: {e}")
 
     finally:
         ser.close()
         GPIO.cleanup()
+
 
 # Main program entry point
 if __name__ == "__main__":
