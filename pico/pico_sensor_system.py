@@ -230,7 +230,7 @@ def send_sensor_data(feed=None, recalibration=None):
         ds18b20_temperature = ds18b20.temperature
         pressure = bmp280.pressure
         timestamp = get_rtc_time()
-        sensor_data = f"SENSOR DATA:{timestamp},{co2:.1f},{ds18b20_temperature:.1f},{temperature:.1f},{humidity:.1f},{pressure:.1f}"
+        sensor_data = f"SENSOR DATA:{timestamp},{co2},{ds18b20_temperature},{temperature},{humidity},{pressure},{feed},{recalibration}"
         print(sensor_data)
         log_data_to_csv(timestamp, co2, ds18b20_temperature, temperature, humidity, pressure, feed, recalibration)
     except Exception as e:
