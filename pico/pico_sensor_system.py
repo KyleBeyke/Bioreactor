@@ -21,8 +21,8 @@ import storage
 import adafruit_sdcard
 import alarm
 import supervisor
-import microcontroller  # For reset functionality
-import traceback  # For logging traceback details
+import microcontroller
+import traceback
 
 # Global default sensor data query cycle
 sensor_query_cycle_mins = 5  # Time interval for querying sensor data (in minutes)
@@ -33,10 +33,6 @@ def reset_pico():
     """Resets the Pico after a 30-second wait to allow safe shutdown of tasks."""
     print("Resetting the Pico in 30 seconds...")
     time.sleep(30)
-    try:
-        log_info("Resetting the Pico now.")
-    except Exception as e:
-        print(f"Failed to log the Pico reset: {e}")
     microcontroller.reset()
 
 # I2C initialization with retries
@@ -247,18 +243,17 @@ def sync_rtc_time(sync_time_str):
 def handle_commands(command):
     """Handles commands from the Raspberry Pi."""
     try:
+        log_info(f"Received command: {command}")
         if command.startswith("FEED"):
             feed_amount = command.split(",")[1]
             log_info(f"Feed command received: {feed_amount} grams")
             send_sensor_data(feed_amount, None)
-            log_info("Feed operation completed.")
 
         elif command.startswith("CALIBRATE"):
             recalibration_value = int(command.split(",")[1])
             scd30.forced_recalibration_reference = recalibration_value
             log_info(f"Recalibration command received: {recalibration_value} ppm")
             send_sensor_data(None, recalibration_value)
-            log_info("Recalibration completed.")
 
         elif command == "REQUEST_DATA":
             log_info("Data request command received.")
@@ -288,7 +283,6 @@ def handle_commands(command):
             set_pressure_reference(pressure)
 
         elif command.startswith("SET_CYCLE_MINS"):
-            global cycle
             new_cycle = int(command.split(",")[1])
             log_info(f"Set cycle command received: {new_cycle} minute(s)")
             set_cycle(new_cycle)
@@ -316,7 +310,6 @@ def control_loop():
 
     global cycle
 
-    # Initial sensor data send before entering the main loop
     log_info("Sending initial sensor data after warm-up period.")
     try:
         update_scd30_compensation()
