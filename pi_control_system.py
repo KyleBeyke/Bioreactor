@@ -16,6 +16,7 @@ import csv
 import RPi.GPIO as GPIO
 from cryptography.fernet import Fernet
 import requests
+import datetime
 
 # Initialize logging
 LOG_FILE = "bioreactor_log.log"
@@ -100,7 +101,7 @@ def log_command(command):
 def send_command_to_pico(command):
     """Sends a command over serial to the Pico, ensuring it is properly terminated."""
     try:
-        full_command = f"{command}\n"  # Ensure the command is properly terminated
+        full_command = f"{command}\n\r"  # Ensure the command is properly terminated
         ser.write(full_command.encode())
         ser.flush()  # Ensure the command is sent immediately
         log_command(command)
@@ -130,6 +131,8 @@ def show_help_menu():
     help_menu = """
     /h   : Show this help menu
     /d   : Request sensor data
+    /t   : Request RTC time
+    /st  : Set RTC time on the Pico
     /f   : Feed - Enter the feed amount in grams
     /cal : Calibrate - Enter the CO2 value for recalibration
     /alt : Set altitude for SCD30 sensor
@@ -172,6 +175,24 @@ def control_loop():
 
                     elif command == '/d':
                         send_command_to_pico("REQUEST_DATA")
+
+                    elif command == '/t':
+                        request_rtc_time()
+
+                    elif command == '/st':
+                        try:
+                            # Get the current system time from the Raspberry Pi
+                            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                            # Send the system time to the Pico in the expected format: SYNC_TIME,YYYY-MM-DD HH:MM:SS
+                            send_command_to_pico(f"SYNC_TIME,{current_time}")
+
+                            print(f"System time sent to Pico: {current_time}")
+                            logging.info(f"System time sent to Pico: {current_time}")
+
+                        except Exception as e:
+                            print(f"Failed to send system time: {e}")
+                            logging.error(f"Failed to send system time: {e}")
 
                     elif command == '/f':
                         try:
