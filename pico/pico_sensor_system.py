@@ -3,7 +3,7 @@ pico_sensor_system.py
 
 This script runs on the Raspberry Pi Pico to manage sensor readings and communication with the Raspberry Pi.
 It supports:
-- Reading data from the SCD30 CO2 sensor, BMP280 pressure sensor, and DS3231 RTC.
+- Reading data from the SCD30 CO2 sensor, BMP280 pressure sensor, DS3231 RTC, and DS18B20 temperature sensor.
 - Logging sensor data to an SD card.
 - Responding to commands (feed operations, recalibration, shutdown, request data).
 - Synchronizing time with the Raspberry Pi.
@@ -193,7 +193,7 @@ def log_data_to_csv(timestamp, co2, probe_temp, sensor_temp, humidity, pressure,
     """Logs sensor data to the CSV file on the SD card."""
     try:
         with open(DATA_LOG_FILE, mode='a') as csvfile:
-            csvfile.write(f"{timestamp},{co2},{probe_temp},{sensor_temp},{humidity},{pressure},{feed_amount},{recalibration}\n")
+            csvfile.write(f"{timestamp},{co2},{probe_temp},{sensor_temp},{humidity},{pressure},{feed_amount if feed_amount is not None else 'N/A'},{recalibration if recalibration is not None else 'N/A'}\n")
         log_info(f"Data logged: CO2: {co2} ppm, Media Temp: {probe_temp}, Sensor Temp: {sensor_temp}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Feed Amount: {feed_amount}, Recalibration: {recalibration}")
     except Exception as e:
         log_traceback_error(e)
@@ -230,7 +230,8 @@ def send_sensor_data(feed=None, recalibration=None):
         ds18b20_temperature = ds18b20.temperature
         pressure = bmp280.pressure
         timestamp = get_rtc_time()
-        sensor_data = f"SENSOR DATA:{timestamp},{co2},{ds18b20_temperature},{temperature},{humidity},{pressure},{feed},{recalibration}"
+        # Log with conditionally formatting feed and recalibration values
+        sensor_data = f"SENSOR DATA:{timestamp},{co2:.2f},{ds18b20_temperature:.2f},{temperature:.2f},{humidity:.2f},{pressure:.2f},{feed if feed is not None else 'N/A'},{recalibration if recalibration is not None else 'N/A'}"
         print(sensor_data)
         log_data_to_csv(timestamp, co2, ds18b20_temperature, temperature, humidity, pressure, feed, recalibration)
     except Exception as e:

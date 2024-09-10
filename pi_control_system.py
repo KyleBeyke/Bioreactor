@@ -176,31 +176,38 @@ def control_loop():
                     if serial_data.startswith("SENSOR DATA:"):
                         # Extract sensor data, assuming it's in the format: "SENSOR DATA:timestamp,CO2,temperature,humidity,pressure"
                         data_parts = serial_data.split(":")[1].split(",")
-                        co2_value = int(data_parts[1])  # Extract the CO2 value
 
-                        # Check if the CO2 value is above the threshold
-                        if co2_value >= co2_threshold:
-                            above_threshold_flag = True  # Set flag to indicate above-threshold reading
+                        # Ensure the correct number of parts before parsing
+                        if len(data_parts) >= 6:  # For the usual 6 parts
+                            co2_value = float(data_parts[1])  # Extract the CO2 value
 
-                        # Check if the CO2 value is below the threshold
-                        if co2_value < co2_threshold and above_threshold_flag is True:
-                            below_threshold_count += 1  # Increment count for below-threshold readings
+                            # Check if the CO2 value is above the threshold
+                            if co2_value >= co2_threshold:
+                                above_threshold_flag = True  # Set flag to indicate above-threshold reading
+
+                            # Check if the CO2 value is below the threshold
+                            if co2_value < co2_threshold and above_threshold_flag:
+                                below_threshold_count += 1  # Increment count for below-threshold readings
+                            else:
+                                below_threshold_count = 0  # Reset count if above the threshold
+
+                            # If the CO2 value has been below the threshold for 3 consecutive readings, send a Telegram alert
+                            if below_threshold_count >= 3:
+                                message = f"WARNING: Bioreactor CO2 is below threshold: {co2_threshold} ppm"
+                                send_telegram_message(message)
+                                logging.info(f"Telegram alert sent: {message}")
+                                above_threshold_flag = False  # Reset the counter after the message is sent
+                                below_threshold_count = 0  # Reset the counter after the message is sent
                         else:
-                            below_threshold_count = 0  # Reset count if above the threshold
-
-                        # If the CO2 value has been below the threshold for 3 consecutive readings, send a Telegram alert
-                        if below_threshold_count >= 3:
-                            message = f"WARNING: Bioreactor CO2 is below threshold: {co2_threshold} ppm"
-                            send_telegram_message(message)
-                            logging.info(f"Telegram alert sent: {message}")
-                            above_threshold_flag = False  # Reset the counter after the message is sent
-                            below_threshold_count = 0  # Reset the counter after the message is sent
+                            logging.error(f"Malformed sensor data received: {serial_data}")
 
                     prompt_displayed = False  # Clear prompt flag to redisplay after data is processed
 
             except (serial.SerialException, TimeoutError) as e:
                 logging.error(f"Error with serial communication: {e}")
                 print(f"Error: {e}")
+                time.sleep(2)  # Add a delay to avoid excessive retries
+                continue
 
             # Non-blocking user input check
             rlist, _, _ = select.select([sys.stdin], [], [], 0.1)  # Non-blocking input
