@@ -8,8 +8,6 @@ It supports:
 - Responding to commands (feed operations, recalibration, shutdown, request data).
 - Synchronizing time with the Raspberry Pi.
 - Entering deep sleep and waking via GPIO.
-
-The script includes error handling, logging, retries, and improved modularity.
 """
 
 import time
@@ -111,7 +109,7 @@ for attempt in range(3):
 
 # Setup SCD30 values
 try:
-    scd30.self_calibration_enabled = False # Disable auto-calibration
+    scd30.self_calibration_enabled = False  # Disable auto-calibration
     scd30.measurement_interval = 5  # Set measurement interval to 5 seconds
     scd30.altitude = 139  # Set altitude for pressure compensation
     log_info("SCD30 auto-calibration disabled.")

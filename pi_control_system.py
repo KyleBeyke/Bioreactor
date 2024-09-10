@@ -2,14 +2,6 @@
 pi_control_system.py
 
 This script controls the bioreactor's Raspberry Pi, which communicates with a Pico microcontroller.
-The script manages:
-- Sensor data acquisition (CO2, temperature, etc.)
-- Commands (feed, calibration, shutdown, reset, set altitude, set pressure, set CO2 interval, etc.)
-- Time synchronization with Pico's RTC.
-- Sending alerts via Telegram when CO2 levels cross a threshold.
-- Logging commands and data for debugging and analysis.
-
-Refined with modularity, error handling, logging, and full command support for the Pico.
 """
 
 import serial
@@ -35,7 +27,7 @@ GPIO.setup(WAKE_PIN, GPIO.OUT, initial=GPIO.LOW)
 # Serial setup
 SERIAL_PORT = '/dev/ttyACM0'
 BAUD_RATE = 115200
-TIMEOUT = 1
+TIMEOUT = 2  # Increased timeout to ensure Pico has time to respond
 
 # CSV file for logging commands on the Pi
 COMMAND_LOG_FILE = "commands_log.csv"
@@ -103,6 +95,7 @@ def request_rtc_time(ser):
     """Requests the RTC time from the Pico."""
     try:
         ser.write("REQUEST_RTC_TIME\n".encode())
+        ser.flush()  # Ensure the command is sent immediately
         while True:
             if ser.in_waiting > 0:
                 response = ser.readline().decode('utf-8').strip()
@@ -153,7 +146,6 @@ def control_loop():
     """Main loop to handle Pico communication and commands."""
     try:
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT)
-
     except serial.SerialException as e:
         logging.error(f"Failed to open serial port: {e}")
         print(f"Failed to open serial port: {e}")
@@ -185,6 +177,7 @@ def control_loop():
                     elif command == '/d':
                         request_data_command = "REQUEST_DATA\n"
                         ser.write(request_data_command.encode())
+                        ser.flush()  # Ensure immediate send
                         log_command(request_data_command)
                         logging.info("Data request command sent")
 
@@ -196,6 +189,7 @@ def control_loop():
                                 continue
                             feed_command = f"FEED,{feed_amount}\n"
                             ser.write(feed_command.encode())
+                            ser.flush()  # Ensure immediate send
                             log_command(feed_command)
                             logging.info(f"Feed command sent: {feed_amount} grams")
                         except ValueError:
@@ -207,6 +201,7 @@ def control_loop():
                             co2_value = int(input("Enter CO2 value for recalibration: "))
                             recalibration_command = f"CALIBRATE,{co2_value}\n"
                             ser.write(recalibration_command.encode())
+                            ser.flush()  # Ensure immediate send
                             log_command(recalibration_command)
                             logging.info(f"Recalibration command sent for {co2_value} ppm")
                         except ValueError:
@@ -221,6 +216,7 @@ def control_loop():
                                 continue
                             altitude_command = f"SET_ALTITUDE,{altitude}\n"
                             ser.write(altitude_command.encode())
+                            ser.flush()  # Ensure immediate send
                             log_command(altitude_command)
                             logging.info(f"Altitude set to: {altitude} meters")
                         except ValueError:
@@ -235,6 +231,7 @@ def control_loop():
                                 continue
                             pressure_command = f"SET_PRESSURE,{pressure}\n"
                             ser.write(pressure_command.encode())
+                            ser.flush()  # Ensure immediate send
                             log_command(pressure_command)
                             logging.info(f"Pressure reference set to: {pressure} hPa")
                         except ValueError:
@@ -249,6 +246,7 @@ def control_loop():
                                 continue
                             interval_command = f"SET_CO2_INTERVAL,{interval}\n"
                             ser.write(interval_command.encode())
+                            ser.flush()  # Ensure immediate send
                             log_command(interval_command)
                             logging.info(f"CO2 measurement interval set to: {interval} seconds")
                         except ValueError:
@@ -263,6 +261,7 @@ def control_loop():
                                 continue
                             cycle_command = f"SET_CYCLE_MINS,{new_cycle}\n"
                             ser.write(cycle_command.encode())
+                            ser.flush()  # Ensure immediate send
                             log_command(cycle_command)
                             logging.info(f"Sensor data query cycle set to: {new_cycle} minutes")
                         except ValueError:
@@ -272,6 +271,7 @@ def control_loop():
                     elif command == '/r':
                         reset_command = "RESET_PICO\n"
                         ser.write(reset_command.encode())
+                        ser.flush()  # Ensure immediate send
                         log_command(reset_command)
                         logging.info("Reset command sent to Pico")
 
