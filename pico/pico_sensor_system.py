@@ -23,9 +23,11 @@ import alarm
 import supervisor
 import microcontroller
 import traceback
+from adafruit_onewire.bus import OneWireBus  # For OneWire communication
+import adafruit_ds18x20  # For DS18B20 temperature sensor
 
 # Global default sensor data query cycle
-sensor_query_cycle_mins = 5  # Time interval for querying sensor data (in minutes)
+sensor_query_cycle_mins = 3  # Time interval for querying sensor data (in minutes)
 cycle = sensor_query_cycle_mins * 60  # Convert minutes to seconds
 
 # Function to reset the Pico
@@ -46,6 +48,22 @@ for attempt in range(3):
         break
     except Exception as e:
         print(f"Failed to initialize I2C devices on attempt {attempt + 1}: {e}")
+        if attempt == 2:
+            reset_pico()
+
+# DS18B20 temperature sensor initialization
+for attempt in range(3):
+    try:
+        onewire_bus = OneWireBus(board.GP18)
+        devices = onewire_bus.scan()
+        if not devices:
+            raise RuntimeError("No DS18B20 sensor found!")
+
+        ds18b20 = adafruit_ds18x20.DS18X20(onewire_bus, devices[0])
+        print(f"DS18B20 initialized successfully.")
+        break
+    except Exception as e:
+        print(f"Failed to initialize DS18B20 on attempt {attempt + 1}: {e}")
         if attempt == 2:
             reset_pico()
 
@@ -171,12 +189,12 @@ def set_cycle(new_cycle):
 # CSV logging function
 DATA_LOG_FILE = "/sd/sensor_data.csv"
 
-def log_data_to_csv(timestamp, co2, temperature, humidity, pressure, feed_amount=None, recalibration=None):
+def log_data_to_csv(timestamp, co2, probe_temp, sensor_temp, humidity, pressure, feed_amount=None, recalibration=None):
     """Logs sensor data to the CSV file on the SD card."""
     try:
         with open(DATA_LOG_FILE, mode='a') as csvfile:
-            csvfile.write(f"{timestamp},{co2},{temperature},{humidity},{pressure},{feed_amount},{recalibration}\n")
-        log_info(f"Data logged: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Feed Amount: {feed_amount}, Recalibration: {recalibration}")
+            csvfile.write(f"{timestamp},{co2},{probe_temp},{sensor_temp},{humidity},{pressure},{feed_amount},{recalibration}\n")
+        log_info(f"Data logged: CO2: {co2} ppm, Media Temp: {probe_temp}, Sensor Temp: {sensor_temp}°C, Humidity: {humidity}%, Pressure: {pressure} hPa, Feed Amount: {feed_amount}, Recalibration: {recalibration}")
     except Exception as e:
         log_traceback_error(e)
         log_error("Failed to log sensor data to CSV.")
@@ -209,13 +227,15 @@ def send_sensor_data(feed=None, recalibration=None):
         co2 = scd30.CO2
         temperature = scd30.temperature
         humidity = scd30.relative_humidity
+        ds18b20_temperature = ds18b20.temperature
         pressure = bmp280.pressure
         timestamp = get_rtc_time()
-        sensor_data = f"SENSOR DATA:{timestamp},{co2:.2f},{temperature:.2f},{humidity:.2f},{pressure:.2f}"
+        sensor_data = f"SENSOR DATA:{timestamp},{co2:.1f},{ds18b20_temperature:.1f},{temperature:.1f},{humidity:.1f},{pressure:.1f}"
         print(sensor_data)
-        log_data_to_csv(timestamp, co2, temperature, humidity, pressure, feed, recalibration)
+        log_data_to_csv(timestamp, co2, ds18b20_temperature, temperature, humidity, pressure, feed, recalibration)
     except Exception as e:
         log_traceback_error(e)
+        log_error("Error while sending sensor data.")
 
 # Function to shutdown Pico and enter deep sleep
 def shutdown_pico():
