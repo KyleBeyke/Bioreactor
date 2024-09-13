@@ -1,4 +1,4 @@
-# code.py
+# main.py
 
 """
 Main control loop that manages sensors, heater control, and command processing.
@@ -23,25 +23,33 @@ async def control_loop():
     Logger.log_info("Starting system... warming up sensors for 15 seconds.")
     await asyncio.sleep(15)  # Use asyncio.sleep for async compatibility
     # Initialize system components
-    Logger.log_info("Initializing system...")
+Logger.log_info("Initializing system...")
+sensor_manager = SensorManager()
+sensor_manager.initialize_sensors()
+
+# Initialize PID controller (with default values, will be updated after auto-tuning)
+pid_controller = PIDController(Kp=2.0, Ki=0.1, Kd=0.05, setpoint=default_temperature)
+
+# Initialize heater controller
+heater_controller = HeaterController(zero_cross_pin=zero_cross_pin, control_pin=heater_control_pin, pid_controller=pid_controller)
+
+# Run auto-tuning before the main loop
+Logger.log_info("Running auto-tuning PID...")
+auto_tuner = AutoTuningPIDController(heater_controller)
+tuned_Kp, tuned_Ki, tuned_Kd = auto_tuner.auto_tune()
+
+# Set the new PID values
+pid_controller.Kp = tuned_Kp
+pid_controller.Ki = tuned_Ki
+pid_controller.Kd = tuned_Kd
+
+# Enter the main control loop
+asyncio.run(heater_controller.zero_cross_task())
+    # Initialize components
     sensor_manager = SensorManager()
-    sensor_manager.initialize_sensors()
-
-    # Initialize PID controller (with default values, will be updated after auto-tuning)
     pid_controller = PIDController(Kp=2.0, Ki=0.1, Kd=0.05, setpoint=default_temperature)
-
-    # Initialize heater controller
-    heater_controller = HeaterController(zero_cross_pin=zero_cross_pin, control_pin=heater_control_pin, pid_controller=pid_controller)
-
-    # Run auto-tuning before the main loop
-    Logger.log_info("Running auto-tuning PID...")
-    auto_tuner = AutoTuningPIDController(heater_controller)
-    tuned_Kp, tuned_Ki, tuned_Kd = auto_tuner.auto_tune()
-
-    # Set the new PID values
-    pid_controller.Kp = tuned_Kp
-    pid_controller.Ki = tuned_Ki
-    pid_controller.Kd = tuned_Kd
+    heater_controller = HeaterController(board.GP14, board.GP15, pid_controller)
+    command_handler = CommandHandler(heater_controller, sensor_manager)
 
     # Initialize sensor data and heater control
     sensor_query_interval = default_sensor_query_interval

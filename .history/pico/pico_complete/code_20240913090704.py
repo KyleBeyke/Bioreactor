@@ -1,4 +1,4 @@
-# code.py
+# main.py
 
 """
 Main control loop that manages sensors, heater control, and command processing.
@@ -42,6 +42,14 @@ async def control_loop():
     pid_controller.Kp = tuned_Kp
     pid_controller.Ki = tuned_Ki
     pid_controller.Kd = tuned_Kd
+
+    # Enter the main control loop
+    asyncio.run(heater_controller.zero_cross_task())
+    # Initialize components
+    sensor_manager = SensorManager()
+    pid_controller = PIDController(Kp=2.0, Ki=0.1, Kd=0.05, setpoint=default_temperature)
+    heater_controller = HeaterController(board.GP14, board.GP15, pid_controller)
+    command_handler = CommandHandler(heater_controller, sensor_manager)
 
     # Initialize sensor data and heater control
     sensor_query_interval = default_sensor_query_interval

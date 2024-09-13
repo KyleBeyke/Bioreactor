@@ -1,4 +1,4 @@
-# code.py
+# main.py
 
 """
 Main control loop that manages sensors, heater control, and command processing.
