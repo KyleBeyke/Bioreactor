@@ -1,5 +1,7 @@
 """
-SensorManager class for managing the initialization and data collection from all sensors in the system.
+sensor_manager.py
+
+SensorManager handles the initialization and data collection from all sensors in the system.
 It also provides power management functionalities like shutdown and reset.
 
 The following sensors are managed:
@@ -13,7 +15,6 @@ The class provides methods to:
 - Retrieve data from sensors
 - Set sensor parameters (e.g., altitude, pressure)
 - Manage power (shutdown, reset)
-- Handle buffered sensor data logging
 
 Dependencies:
 - adafruit_scd30: For interfacing with the SCD30 sensor.
@@ -51,7 +52,6 @@ class SensorManager:
         self.bmp280 = None  # BMP280 pressure sensor
         self.rtc = None  # DS3231 real-time clock
         self.ds18b20 = None  # DS18B20 temperature sensor
-        self.sensor_data_buffer = []  # Buffer for storing sensor data before logging to SD card
 
     def initialize_sensors(self):
         """
@@ -121,30 +121,10 @@ class SensorManager:
             ds_temp = self.get_temperature()
             pressure = self.bmp280.pressure
 
-            # Add data to the buffer
-            self.sensor_data_buffer.append((co2, temperature, humidity, ds_temp, pressure))
-
             return co2, temperature, humidity, ds_temp, pressure
         except Exception as e:
             Logger.log_error(f"Failed to read sensor data: {e}")
             raise RuntimeError("Critical failure: Unable to read sensor data.") from e
-
-    def write_sensor_data_to_sd(self):
-        """
-        Writes the buffered sensor data to the SD card. This method flushes the buffer.
-        """
-        try:
-            if self.sensor_data_buffer:
-                for data in self.sensor_data_buffer:
-                    co2, temperature, humidity, ds_temp, pressure = data
-                    Logger.log_sensor_data(ds_temp, self.scd30.temperature, self.scd30.CO2)
-                    Logger.log_info(f"Buffered Sensor Data: CO2: {co2} ppm, Temp: {temperature}°C, Humidity: {humidity}%, Pressure: {pressure} hPa")
-
-                # Clear the buffer after writing to SD card
-                self.sensor_data_buffer.clear()
-        except Exception as e:
-            Logger.log_error(f"Failed to write buffered sensor data: {e}")
-            raise RuntimeError("Critical failure: Unable to write buffered data.") from e
 
     def send_sensor_data(self, feed_amount=None, recalibration_value=None):
         """
@@ -156,9 +136,6 @@ class SensorManager:
         """
         try:
             co2, temp, humidity, ds_temp, pressure = self.read_sensors()
-
-            if len(self.sensor_data_buffer) >= 50:  # Adjustable buffer size for periodic flush
-                self.write_sensor_data_to_sd()
 
             Logger.log_info(f"Sensor data: CO2={co2} ppm, Temp={temp}°C, Humidity={humidity}%, Pressure={pressure} hPa")
 
@@ -236,46 +213,3 @@ class SensorManager:
         except Exception as e:
             Logger.log_error(f"Failed to set pressure reference: {e}")
             raise RuntimeError("Critical failure: Unable to set pressure reference.") from e
-
-    def set_co2_interval(self, interval):
-        """
-        Sets the measurement interval for the SCD30 CO2 sensor.
-
-        Args:
-            interval (int): The CO2 measurement interval in seconds.
-
-        Raises:
-            RuntimeError: If the interval cannot be set.
-        """
-        try:
-            self.scd30.measurement_interval = interval
-            Logger.log_info(f"SCD30 CO2 interval set to: {interval} seconds")
-        except Exception as e:
-            Logger.log_error(f"Failed to set CO2 interval: {e}")
-            raise RuntimeError("Critical failure: Unable to set CO2 interval.") from e
-
-    def set_cycle(self, cycle_duration):
-        """
-        Adjusts the sensor data query cycle duration.
-
-        Args:
-            cycle_duration (int): Cycle duration in minutes.
-
-        Raises:
-            RuntimeError: If the cycle duration cannot be set.
-        """
-        try:
-            self.query_cycle_duration = cycle_duration * 60  # Convert minutes to seconds
-            Logger.log_info(f"Sensor query cycle set to: {cycle_duration} minutes.")
-        except Exception as e:
-            Logger.log_error(f"Failed to set sensor query cycle: {e}")
-            raise RuntimeError("Critical failure: Unable to set query cycle.") from e
-
-    def get_cycle_duration(self):
-        """
-        Retrieves the current sensor query cycle duration.
-
-        Returns:
-            int: Current cycle duration in seconds.
-        """
-        return self.query_cycle_duration

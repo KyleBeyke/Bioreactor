@@ -16,7 +16,7 @@ import asyncio
 from logger import Logger
 
 class HeaterController:
-    def __init__(self, zero_cross_pin, control_pin, pid_controller, max_duty_cycle=30):
+    def __init__(self, zero_cross_pin, control_pin, pid_controller, max_duty_cycle=40):
         """
         Initializes the HeaterController with the necessary components.
 

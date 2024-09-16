@@ -71,7 +71,7 @@ async def control_loop():
     commands from the Raspberry Pi.
     """
 
-# Log the system start and warm-up period
+    # Log the system start and warm-up period
     Logger.log_info("Starting system... warming up sensors for 15 seconds.")
     await asyncio.sleep(15)  # Delay for sensor warm-up (use asyncio.sleep for async compatibility)
 
@@ -97,7 +97,7 @@ async def control_loop():
     pid_controller.Kd = tuned_Kd
     Logger.log_info(f"Tuned PID parameters: Kp={tuned_Kp}, Ki={tuned_Ki}, Kd={tuned_Kd}")
 
-    # Step 6: Set the initial sensor query interval (set from the global default)
+    # Step 6: Initialize sensor query interval and heater control
     sensor_query_interval = default_sensor_query_interval
 
     # Step 7: Log initial sensor data after warm-up
@@ -145,7 +145,7 @@ async def control_loop():
                 command = input().strip()  # Read the incoming command
                 command_handler.handle(command)  # Handle the command
 
-                # If the command is to update the cycle interval, it is handled here
+                # Handle configurable sensor query interval through a command (e.g., "SET_CYCLE_MINS,5")
                 if command.startswith("SET_CYCLE_MINS"):
                     new_cycle = int(command.split(",")[1]) * 60  # Convert minutes to seconds
                     sensor_query_interval = max(60, new_cycle)  # Ensure a minimum interval of 1 minute

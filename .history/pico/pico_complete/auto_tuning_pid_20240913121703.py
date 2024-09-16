@@ -1,29 +1,3 @@
-"""
-AutoTuningPIDController class for automatically tuning PID parameters using the Ziegler-Nichols method.
-
-The AutoTuningPIDController performs the following tasks:
-- Automatically tunes the Proportional (Kp), Integral (Ki), and Derivative (Kd) values using system response data.
-- Uses forced oscillations to identify the critical gain (Ku) and critical period (Pu) for optimal PID tuning.
-- Provides dynamic adjustment of the critical gain to control the system's oscillations during the tuning process.
-- Once tuned, the calculated PID parameters are applied to the PID controller managing the system (e.g., heater).
-
-Key Features:
-- Force the heater into oscillations by setting a high duty cycle.
-- Detect the system's natural oscillations, measuring the critical period (Pu) and adjusting critical gain dynamically.
-- Calculate and update PID parameters based on the Ziegler-Nichols tuning method.
-- Commands and logs are used to provide feedback and control the tuning process.
-
-System Components:
-- HeaterController: Provides heater control during the tuning process by setting duty cycles and reading temperatures.
-- PIDController: The base PID controller to which the tuned parameters (Kp, Ki, Kd) are applied.
-
-Dependencies:
-- time: Used for time measurements to calculate the oscillation period and control delays.
-- logger: For logging tuning progress, errors, and final results.
-- pid_controller: The PID controller that manages the system after tuning.
-- heater_controller: The system component controlling the heater during the tuning process.
-"""
-
 import time
 from logger import Logger
 from pid_controller import PIDController

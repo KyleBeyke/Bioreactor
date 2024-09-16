@@ -1,33 +1,4 @@
-"""
-Main control loop for managing sensors, heater control, logging, and command processing.
-
-This script is responsible for:
-- Initializing system components such as sensors, heater, and PID controller.
-- Running PID auto-tuning to optimize control parameters for the heater.
-- Handling asynchronous tasks like sensor reading, heater control, and command processing.
-- Logging sensor data and system events to the SD card using buffered writes.
-- Resetting the system with a countdown if sensor initialization or SD card logging fails.
-- Periodically flushing buffered data to ensure logs are written even without reaching the buffer limit.
-- Resetting or shutting down the system when requested, ensuring logs are flushed beforehand.
-
-System Components:
-- SensorManager: Handles the initialization and reading from the system sensors (e.g., SCD30, BMP280, DS18B20).
-- HeaterController: Manages the heater using PID control and zero-cross detection for AC power modulation.
-- PIDController: Implements the PID control logic to maintain target temperature.
-- AutoTuningPIDController: Automatically tunes the PID parameters using the Ziegler-Nichols method.
-- CommandHandler: Processes commands received from the Raspberry Pi to control system behavior.
-
-Dependencies:
-- asyncio: For managing asynchronous tasks.
-- supervisor: To check for serial commands from the Raspberry Pi.
-- logger: For logging system events, errors, and sensor data.
-- sensor_manager: For initializing and reading sensor data.
-- heater_controller: For controlling the heater based on PID output.
-- pid_controller: For handling PID-based temperature control.
-- command_handler: For processing commands and adjusting system behavior.
-- microcontroller: To reset the system programmatically.
-- time: For tracking time and implementing delays in the control loop.
-"""
+# code.py
 
 """
 Main control loop that manages sensors, heater control, and command processing.
@@ -71,7 +42,7 @@ async def control_loop():
     commands from the Raspberry Pi.
     """
 
-# Log the system start and warm-up period
+    # Log the system start and warm-up period
     Logger.log_info("Starting system... warming up sensors for 15 seconds.")
     await asyncio.sleep(15)  # Delay for sensor warm-up (use asyncio.sleep for async compatibility)
 
@@ -84,6 +55,7 @@ async def control_loop():
     pid_controller = PIDController(Kp=2.0, Ki=0.1, Kd=0.05, setpoint=default_temperature)
 
     # Step 3: Initialize the heater controller
+    # NOTE: Ensure that zero_cross_pin and heater_control_pin are defined elsewhere in your code.
     heater_controller = HeaterController(zero_cross_pin=zero_cross_pin, control_pin=heater_control_pin, pid_controller=pid_controller)
 
     # Step 4: Run PID auto-tuning before entering the main control loop
@@ -97,23 +69,26 @@ async def control_loop():
     pid_controller.Kd = tuned_Kd
     Logger.log_info(f"Tuned PID parameters: Kp={tuned_Kp}, Ki={tuned_Ki}, Kd={tuned_Kd}")
 
-    # Step 6: Set the initial sensor query interval (set from the global default)
+    # Step 6: Initialize sensor query interval and heater control
     sensor_query_interval = default_sensor_query_interval
 
     # Step 7: Log initial sensor data after warm-up
     Logger.log_info("Sending initial sensor data after warm-up period.")
     try:
+        # Compensate sensors and log the initial sensor readings
         sensor_manager.scd30.ambient_pressure = int(sensor_manager.bmp280.pressure)  # Pressure compensation for SCD30
         co2, temp, humidity, ds_temp, pressure = sensor_manager.read_sensors()  # Read sensor data
         Logger.log_info(f"Initial sensor data: CO2: {co2} ppm, Temp: {temp}°C, Humidity: {humidity}%, Pressure: {pressure} hPa")
     except Exception as e:
         Logger.log_traceback_error(e)  # Log any errors during sensor reading
 
-    # Track the time of the last sensor reading and buffer flush
+    # Track the time of the last sensor reading
     last_reading_time = time.monotonic()
 
     # Step 8: Start the heater control tasks concurrently with other tasks
     Logger.log_info("Starting heater control and waiting for temperature stabilization...")
+
+    # Launch all asynchronous tasks concurrently (zero crossing, temperature maintenance, and recalibration)
     await asyncio.gather(
         heater_controller.zero_cross_task(),  # Zero crossing task for AC heater control
         maintain_temperature(heater_controller, sensor_manager),  # PID-based temperature maintenance
@@ -135,17 +110,13 @@ async def control_loop():
             except Exception as e:
                 Logger.log_traceback_error(e)  # Log any errors during sensor reading
 
-        # Step 10: Handle periodic buffer flushing (every 1 minute or when buffers fill up)
-        if Logger._time_to_flush():
-            Logger.flush_all_buffers()  # Ensure logs and sensor data are written periodically
-
-        # Step 11: Handle commands from the Raspberry Pi
+        # Step 10: Handle commands from the Raspberry Pi
         try:
             if supervisor.runtime.serial_bytes_available:
                 command = input().strip()  # Read the incoming command
                 command_handler.handle(command)  # Handle the command
 
-                # If the command is to update the cycle interval, it is handled here
+                # Handle configurable sensor query interval through a command (e.g., "SET_CYCLE_MINS,5")
                 if command.startswith("SET_CYCLE_MINS"):
                     new_cycle = int(command.split(",")[1]) * 60  # Convert minutes to seconds
                     sensor_query_interval = max(60, new_cycle)  # Ensure a minimum interval of 1 minute
@@ -155,14 +126,6 @@ async def control_loop():
 
         # Small async sleep to allow other tasks to run efficiently
         await asyncio.sleep(1)
-
-        # Step 12: Flush buffers before system resets or shutdowns
-        if should_reset_or_shutdown():
-            Logger.flush_all_buffers()  # Ensure buffers are flushed before shutdown
-            if shutting_down:
-                sensor_manager.shutdown_pico()
-            elif resetting:
-                sensor_manager.reset_pico()
 
 # Main entry point for the program
 if __name__ == "__main__":
